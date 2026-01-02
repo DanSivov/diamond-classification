@@ -39,17 +39,30 @@
         <!-- Step 3: New Classification -->
         <section id="step-new-classification" class="step-section">
             <h2>New Classification</h2>
-            <p>Run process_batch.py locally with your images, then upload the generated JSON file</p>
+            <p>Select images to classify</p>
+
+            <input type="file" id="new-image-upload" accept=".jpg,.jpeg,.png,.jp2" multiple>
+            <div class="button-group-horizontal">
+                <button onclick="processImages()">Process Images</button>
+                <button onclick="goToStart()" class="btn-secondary">Back</button>
+            </div>
+        </section>
+
+        <!-- Step 3.5: Processing Instructions -->
+        <section id="step-processing" class="step-section">
+            <h2>Processing Required</h2>
+            <p>Images uploaded. Run classification locally with the following command:</p>
 
             <div class="info-box">
-                <p>Command: <code>python process_batch.py path/to/images/</code></p>
+                <p><code>python process_batch.py path/to/your/images/</code></p>
                 <p>Output location: <code>output/graded_shared_final_json/</code></p>
             </div>
 
-            <input type="file" id="new-json-upload" accept=".json">
+            <p>After running the command, upload the generated JSON file:</p>
+            <input type="file" id="processing-json-upload" accept=".json">
             <div class="button-group-horizontal">
-                <button onclick="loadNewClassification()">Load Results</button>
-                <button onclick="goToStart()" class="btn-secondary">Back</button>
+                <button onclick="loadProcessedResults()">Load Results</button>
+                <button onclick="goToStart()" class="btn-secondary">Cancel</button>
             </div>
         </section>
 

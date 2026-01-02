@@ -52,11 +52,21 @@ function loadExistingClassification() {
     reader.readAsText(fileInput.files[0]);
 }
 
-// Step 3: Load New Classification
-function loadNewClassification() {
-    const fileInput = document.getElementById('new-json-upload');
+// Step 3: Process Images
+function processImages() {
+    const fileInput = document.getElementById('new-image-upload');
     if (fileInput.files.length === 0) {
-        alert('Please select a JSON file');
+        alert('Please select images to classify');
+        return;
+    }
+
+    showStep('processing');
+}
+
+function loadProcessedResults() {
+    const fileInput = document.getElementById('processing-json-upload');
+    if (fileInput.files.length === 0) {
+        alert('Please select the generated JSON file');
         return;
     }
 
