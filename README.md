@@ -1,6 +1,7 @@
 # Diamond Classification and Grading System
 
 ML-based diamond orientation detection and pickup grading system using Random Forest classifier.
+Web available at https://dansivov.github.io/diamond-classification/
 
 ## Web Interface
 
