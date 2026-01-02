@@ -4,7 +4,8 @@ const state = {
     classificationData: null,
     verificationData: [],
     currentROIIndex: 0,
-    savedCodexes: []
+    savedCodexes: [],
+    apiUrl: 'http://localhost:5000'
 };
 
 // Navigation
@@ -53,33 +54,103 @@ function loadExistingClassification() {
 }
 
 // Step 3: Process Images
-function processImages() {
+async function processImages() {
     const fileInput = document.getElementById('new-image-upload');
     if (fileInput.files.length === 0) {
         alert('Please select images to classify');
         return;
     }
 
+    const files = fileInput.files;
+
     showStep('processing');
+    showProcessingStatus('Uploading images...', 0);
+
+    try {
+        if (files.length === 1) {
+            await processSingleImage(files[0]);
+        } else {
+            await processBatchImages(files);
+        }
+    } catch (error) {
+        alert('Classification failed: ' + error.message);
+        showStep('new-classification');
+    }
 }
 
-function loadProcessedResults() {
-    const fileInput = document.getElementById('processing-json-upload');
-    if (fileInput.files.length === 0) {
-        alert('Please select the generated JSON file');
-        return;
+async function processSingleImage(file) {
+    const formData = new FormData();
+    formData.append('image', file);
+
+    showProcessingStatus('Processing image...', 50);
+
+    const response = await fetch(`${state.apiUrl}/classify`, {
+        method: 'POST',
+        body: formData
+    });
+
+    if (!response.ok) {
+        throw new Error('Classification failed');
     }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        try {
-            state.classificationData = JSON.parse(e.target.result);
-            showCheckOrSave();
-        } catch (error) {
-            alert('Error parsing JSON: ' + error.message);
-        }
-    };
-    reader.readAsText(fileInput.files[0]);
+    const data = await response.json();
+
+    showProcessingStatus('Complete', 100);
+
+    state.classificationData = data;
+    showCheckOrSave();
+}
+
+async function processBatchImages(files) {
+    const formData = new FormData();
+
+    for (let i = 0; i < files.length; i++) {
+        formData.append('images', files[i]);
+    }
+
+    showProcessingStatus(`Processing ${files.length} images...`, 50);
+
+    const response = await fetch(`${state.apiUrl}/classify-batch`, {
+        method: 'POST',
+        body: formData
+    });
+
+    if (!response.ok) {
+        throw new Error('Batch classification failed');
+    }
+
+    const data = await response.json();
+
+    showProcessingStatus('Complete', 100);
+
+    if (data.results.length === 1) {
+        state.classificationData = data.results[0];
+    } else {
+        state.classificationData = {
+            image_name: 'Batch Results',
+            total_diamonds: data.results.reduce((sum, r) => sum + (r.total_diamonds || 0), 0),
+            table_count: data.results.reduce((sum, r) => sum + (r.table_count || 0), 0),
+            tilted_count: data.results.reduce((sum, r) => sum + (r.tilted_count || 0), 0),
+            pickable_count: data.results.reduce((sum, r) => sum + (r.pickable_count || 0), 0),
+            invalid_count: data.results.reduce((sum, r) => sum + (r.invalid_count || 0), 0),
+            average_grade: data.results.reduce((sum, r) => sum + (r.average_grade || 0), 0) / data.results.length,
+            classifications: data.results.flatMap(r => r.classifications || [])
+        };
+    }
+
+    showCheckOrSave();
+}
+
+function showProcessingStatus(message, progress) {
+    const statusDiv = document.getElementById('processing-status');
+    if (statusDiv) {
+        statusDiv.innerHTML = `
+            <p>${message}</p>
+            <div class="progress-bar">
+                <div class="progress-fill" style="width: ${progress}%"></div>
+            </div>
+        `;
+    }
 }
 
 // Step 4: Show Check or Save Options

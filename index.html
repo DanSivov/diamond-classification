@@ -48,22 +48,10 @@
             </div>
         </section>
 
-        <!-- Step 3.5: Processing Instructions -->
+        <!-- Step 3.5: Processing -->
         <section id="step-processing" class="step-section">
-            <h2>Processing Required</h2>
-            <p>Images uploaded. Run classification locally with the following command:</p>
-
-            <div class="info-box">
-                <p><code>python process_batch.py path/to/your/images/</code></p>
-                <p>Output location: <code>output/graded_shared_final_json/</code></p>
-            </div>
-
-            <p>After running the command, upload the generated JSON file:</p>
-            <input type="file" id="processing-json-upload" accept=".json">
-            <div class="button-group-horizontal">
-                <button onclick="loadProcessedResults()">Load Results</button>
-                <button onclick="goToStart()" class="btn-secondary">Cancel</button>
-            </div>
+            <h2>Processing Images</h2>
+            <div id="processing-status"></div>
         </section>
 
         <!-- Step 4: Check or Save -->
