@@ -6,6 +6,7 @@ const state = {
     verificationData: [],
     currentROIIndex: 0,
     savedCodexes: [],
+    uploadedImage: null,
     apiUrl: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
         ? 'http://localhost:5000'
         : 'https://web-production-53bec.up.railway.app'
@@ -122,6 +123,7 @@ async function processSingleImage(file) {
     showProcessingStatus('Complete', 100);
 
     state.classificationData = data;
+    state.uploadedImage = file;
     showCheckOrSave();
 }
 
@@ -257,8 +259,89 @@ function updateVerificationDisplay() {
     orientationSpan.style.color = classification.orientation === 'table' ?
         'var(--success-color)' : 'var(--warning-color)';
 
-    drawPlaceholderCanvas('context-canvas', 'Context View');
-    drawPlaceholderCanvas('roi-canvas', `ROI ${classification.roi_id}`);
+    if (state.uploadedImage) {
+        drawContextView(classification);
+        drawROIView(classification);
+    } else {
+        drawPlaceholderCanvas('context-canvas', 'Context View');
+        drawPlaceholderCanvas('roi-canvas', `ROI ${classification.roi_id}`);
+    }
+}
+
+function drawContextView(currentClassification) {
+    const canvas = document.getElementById('context-canvas');
+    const ctx = canvas.getContext('2d');
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+            const scale = Math.min(400 / img.width, 300 / img.height);
+            canvas.width = 400;
+            canvas.height = 300;
+
+            const scaledWidth = img.width * scale;
+            const scaledHeight = img.height * scale;
+            const offsetX = (400 - scaledWidth) / 2;
+            const offsetY = (300 - scaledHeight) / 2;
+
+            ctx.fillStyle = '#1f2937';
+            ctx.fillRect(0, 0, 400, 300);
+            ctx.drawImage(img, offsetX, offsetY, scaledWidth, scaledHeight);
+
+            state.classificationData.classifications.forEach(c => {
+                const [x, y, w, h] = c.bounding_box;
+                const sx = offsetX + x * scale;
+                const sy = offsetY + y * scale;
+                const sw = w * scale;
+                const sh = h * scale;
+
+                if (c.roi_id === currentClassification.roi_id) {
+                    ctx.strokeStyle = '#fbbf24';
+                    ctx.lineWidth = 3;
+                } else {
+                    ctx.strokeStyle = c.orientation === 'table' ? '#10b981' : '#ef4444';
+                    ctx.lineWidth = 2;
+                }
+                ctx.strokeRect(sx, sy, sw, sh);
+            });
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(state.uploadedImage);
+}
+
+function drawROIView(classification) {
+    const canvas = document.getElementById('roi-canvas');
+    const ctx = canvas.getContext('2d');
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+            const [x, y, w, h] = classification.bounding_box;
+
+            canvas.width = 400;
+            canvas.height = 300;
+
+            const scale = Math.min(400 / w, 300 / h);
+            const scaledWidth = w * scale;
+            const scaledHeight = h * scale;
+            const offsetX = (400 - scaledWidth) / 2;
+            const offsetY = (300 - scaledHeight) / 2;
+
+            ctx.fillStyle = '#1f2937';
+            ctx.fillRect(0, 0, 400, 300);
+
+            ctx.drawImage(img, x, y, w, h, offsetX, offsetY, scaledWidth, scaledHeight);
+
+            ctx.strokeStyle = classification.orientation === 'table' ? '#10b981' : '#ef4444';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(offsetX, offsetY, scaledWidth, scaledHeight);
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(state.uploadedImage);
 }
 
 function drawPlaceholderCanvas(canvasId, text) {
