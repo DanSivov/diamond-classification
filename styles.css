@@ -86,14 +86,14 @@ header h1 {
     background: var(--bg-primary);
 }
 
-/* Tab Content */
-.tab-content {
+/* Step Sections */
+.step-section {
     display: none;
     padding: 30px;
     animation: fadeIn 0.3s;
 }
 
-.tab-content.active {
+.step-section.active {
     display: block;
 }
 
@@ -169,6 +169,22 @@ button:hover {
 
 button:active {
     transform: translateY(0);
+}
+
+.btn-primary {
+    background: var(--primary-color);
+}
+
+.btn-primary:hover {
+    background: #1d4ed8;
+}
+
+.btn-secondary {
+    background: var(--text-secondary);
+}
+
+.btn-secondary:hover {
+    background: #4b5563;
 }
 
 code {
@@ -313,11 +329,27 @@ canvas {
     font-weight: 600;
 }
 
-/* Button Group */
-.button-group {
+/* Button Groups */
+.button-group-vertical {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    max-width: 400px;
+    margin: 20px auto;
+}
+
+.button-group-horizontal {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.button-group-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 15px;
+    margin-top: 20px;
 }
 
 .btn-correct {
@@ -545,13 +577,47 @@ kbd {
     background: #4b5563;
 }
 
+/* Info and Summary Boxes */
+.info-box {
+    background: var(--bg-secondary);
+    padding: 20px;
+    border-radius: 8px;
+    margin: 20px 0;
+    border-left: 4px solid var(--primary-color);
+}
+
+.info-box p {
+    margin-bottom: 10px;
+}
+
+.info-box p:last-child {
+    margin-bottom: 0;
+}
+
+.summary-box {
+    background: var(--bg-secondary);
+    padding: 20px;
+    border-radius: 8px;
+    margin: 20px 0;
+}
+
+.summary-box p {
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.summary-box p:last-child {
+    margin-bottom: 0;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
     .roi-display {
         grid-template-columns: 1fr;
     }
 
-    .button-group {
+    .button-group-grid {
         grid-template-columns: 1fr 1fr;
     }
 
