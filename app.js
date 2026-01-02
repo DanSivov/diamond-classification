@@ -1,11 +1,14 @@
 // Global State
+// TODO: Update production API URL after deploying to Railway/Render
 const state = {
     currentStep: 'start',
     classificationData: null,
     verificationData: [],
     currentROIIndex: 0,
     savedCodexes: [],
-    apiUrl: 'http://localhost:5000'
+    apiUrl: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? 'http://localhost:5000'
+        : 'https://your-api-url.railway.app'
 };
 
 // Navigation
