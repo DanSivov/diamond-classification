@@ -1,0 +1,22 @@
+# Output directories (generated locally, not for web deployment)
+output/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Model files (too large for git, download separately)
+FastSAM-x.pt
+*.pt
+
+# Data directories (too large for git)
+data/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

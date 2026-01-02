@@ -1,0 +1,37 @@
+public/
+│
+├── classify_diamond.py                # Main entry point (176 lines)
+├── README.md                           # Full documentation
+├── requirements.txt                    # Python dependencies
+├── .gitignore                          # Git configuration
+├── REFACTORING_SUMMARY.md             # This refactoring summary
+│
+├── models/                             # ML Models
+│   └── ml_classifier/
+│       ├── best_model_randomforest.pkl    # Trained model (95.6% accuracy)
+│       └── feature_names.json             # 8 features used
+│
+└── src/                                # Source code
+    ├── __init__.py
+    │
+    ├── preprocessing/                  # Diamond Detection
+    │   ├── __init__.py
+    │   └── sam_detector.py             # FastSAM-based detection (309 lines)
+    │
+    ├── classification/                 # Feature Extraction
+    │   ├── __init__.py
+    │   ├── pure_geometric_classifier.py    # ML features (248 lines)
+    │   └── shape_based_symmetry.py         # Symmetry analysis (679 lines)
+    │
+    └── grading/                        # Pickup Grading
+        ├── __init__.py
+        └── pickup_grader.py            # Grading logic (396 lines)
+
+TOTAL: 14 files (production-ready, no debug/test code)
+
+Key Metrics:
+- Total Python code: ~1,808 lines
+- Model accuracy: 95.6%
+- Supported diamond types: Round, Emerald, Marquise, Baguette
+- Features: 8 geometric features
+- Output: JSON + Visualization
