@@ -54,6 +54,25 @@
             <div id="processing-status"></div>
         </section>
 
+        <!-- Step 3.6: Fallback when API unavailable -->
+        <section id="step-processing-fallback" class="step-section">
+            <h2>API Server Unavailable</h2>
+            <p>Process images locally then upload results</p>
+
+            <div class="info-box">
+                <p>Run this command locally:</p>
+                <p><code>python process_batch.py path/to/your/images/</code></p>
+                <p>Then upload the generated JSON file from:</p>
+                <p><code>output/graded_shared_final_json/</code></p>
+            </div>
+
+            <input type="file" id="fallback-json-upload" accept=".json">
+            <div class="button-group-horizontal">
+                <button onclick="loadFallbackResults()">Load Results</button>
+                <button onclick="goToStart()" class="btn-secondary">Cancel</button>
+            </div>
+        </section>
+
         <!-- Step 4: Check or Save -->
         <section id="step-check-or-save" class="step-section">
             <h2>Classification Loaded</h2>

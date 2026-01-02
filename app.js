@@ -66,6 +66,15 @@ async function processImages() {
 
     const files = fileInput.files;
 
+    // Check if API is available
+    const apiAvailable = await checkAPIHealth();
+
+    if (!apiAvailable) {
+        alert('API server not available. Run images through process_batch.py locally, then upload the JSON file.');
+        showStep('processing-fallback');
+        return;
+    }
+
     showStep('processing');
     showProcessingStatus('Uploading images...', 0);
 
@@ -78,6 +87,18 @@ async function processImages() {
     } catch (error) {
         alert('Classification failed: ' + error.message);
         showStep('new-classification');
+    }
+}
+
+async function checkAPIHealth() {
+    try {
+        const response = await fetch(`${state.apiUrl}/health`, {
+            method: 'GET',
+            timeout: 5000
+        });
+        return response.ok;
+    } catch (error) {
+        return false;
     }
 }
 
@@ -154,6 +175,25 @@ function showProcessingStatus(message, progress) {
             </div>
         `;
     }
+}
+
+function loadFallbackResults() {
+    const fileInput = document.getElementById('fallback-json-upload');
+    if (fileInput.files.length === 0) {
+        alert('Please select the generated JSON file');
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            state.classificationData = JSON.parse(e.target.result);
+            showCheckOrSave();
+        } catch (error) {
+            alert('Error parsing JSON: ' + error.message);
+        }
+    };
+    reader.readAsText(fileInput.files[0]);
 }
 
 // Step 4: Show Check or Save Options
