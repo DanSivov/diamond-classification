@@ -167,9 +167,31 @@ async function processBatchImages(files) {
     showProcessingStatus('Complete', 100);
 
     if (data.results.length === 1) {
+        // Single image in batch - treat as single image
         state.classificationData = data.results[0];
         state.uploadedImage = files[0];
     } else {
+        // Multiple images - store all image data with proper indexing
+        // For batch mode, we'll use the first image's base64 for context view
+        // (user should verify one image at a time)
+        const allClassifications = [];
+        let classificationIdOffset = 0;
+
+        data.results.forEach((result, imageIndex) => {
+            if (result.classifications) {
+                result.classifications.forEach(c => {
+                    // Add image metadata to each classification
+                    allClassifications.push({
+                        ...c,
+                        source_image_name: result.image_name,
+                        source_image_base64: result.full_image_base64,
+                        roi_id: classificationIdOffset + c.roi_id
+                    });
+                });
+                classificationIdOffset += result.classifications.length;
+            }
+        });
+
         state.classificationData = {
             image_name: 'Batch Results',
             total_diamonds: data.results.reduce((sum, r) => sum + (r.total_diamonds || 0), 0),
@@ -178,7 +200,8 @@ async function processBatchImages(files) {
             pickable_count: data.results.reduce((sum, r) => sum + (r.pickable_count || 0), 0),
             invalid_count: data.results.reduce((sum, r) => sum + (r.invalid_count || 0), 0),
             average_grade: data.results.reduce((sum, r) => sum + (r.average_grade || 0), 0) / data.results.length,
-            classifications: data.results.flatMap(r => r.classifications || [])
+            full_image_base64: data.results[0]?.full_image_base64,
+            classifications: allClassifications
         };
         state.uploadedImage = null;
     }
@@ -280,13 +303,18 @@ function updateVerificationDisplay() {
         'var(--success-color)' : 'var(--warning-color)';
 
     console.log('updateVerificationDisplay - uploadedImage exists:', !!state.uploadedImage, 'name:', state.uploadedImage?.name);
+    console.log('Classification data has full_image_base64:', !!state.classificationData.full_image_base64);
 
-    if (state.uploadedImage) {
-        console.log('Drawing actual images for ROI', classification.roi_id);
+    if (state.classificationData.full_image_base64) {
+        console.log('Drawing actual images from API base64 data for ROI', classification.roi_id);
+        drawContextViewFromBase64(classification);
+        drawROIViewFromBase64(classification);
+    } else if (state.uploadedImage) {
+        console.log('Drawing actual images from uploaded file for ROI', classification.roi_id);
         drawContextView(classification);
         drawROIView(classification);
     } else {
-        console.log('No uploaded image, showing placeholders');
+        console.log('No uploaded image or base64 data, showing placeholders');
         drawPlaceholderCanvas('context-canvas', 'Context View');
         drawPlaceholderCanvas('roi-canvas', `ROI ${classification.roi_id}`);
     }
@@ -384,6 +412,99 @@ function drawROIView(classification) {
         img.src = e.target.result;
     };
     reader.readAsDataURL(state.uploadedImage);
+}
+
+function drawContextViewFromBase64(currentClassification) {
+    console.log('drawContextViewFromBase64 called for ROI', currentClassification.roi_id);
+    const canvas = document.getElementById('context-canvas');
+    const ctx = canvas.getContext('2d');
+
+    // For batch mode, use the source image of the current classification
+    const imageBase64 = currentClassification.source_image_base64 || state.classificationData.full_image_base64;
+
+    const img = new Image();
+    img.onerror = (error) => {
+        console.error('Image load error in drawContextViewFromBase64:', error);
+    };
+    img.onload = () => {
+        console.log('Base64 image rendered for context view, size:', img.width, 'x', img.height);
+        const scale = Math.min(400 / img.width, 300 / img.height);
+        canvas.width = 400;
+        canvas.height = 300;
+
+        const scaledWidth = img.width * scale;
+        const scaledHeight = img.height * scale;
+        const offsetX = (400 - scaledWidth) / 2;
+        const offsetY = (300 - scaledHeight) / 2;
+
+        ctx.fillStyle = '#1f2937';
+        ctx.fillRect(0, 0, 400, 300);
+        ctx.drawImage(img, offsetX, offsetY, scaledWidth, scaledHeight);
+
+        // Draw bounding boxes only for diamonds from the same source image
+        const sourceImageName = currentClassification.source_image_name || state.classificationData.image_name;
+        state.classificationData.classifications.forEach(c => {
+            // Skip diamonds from different images in batch mode
+            if (c.source_image_name && c.source_image_name !== sourceImageName) {
+                return;
+            }
+
+            const [x, y, w, h] = c.bounding_box;
+            const sx = offsetX + x * scale;
+            const sy = offsetY + y * scale;
+            const sw = w * scale;
+            const sh = h * scale;
+
+            if (c.roi_id === currentClassification.roi_id) {
+                ctx.strokeStyle = '#fbbf24';
+                ctx.lineWidth = 3;
+            } else {
+                ctx.strokeStyle = c.orientation === 'table' ? '#10b981' : '#ef4444';
+                ctx.lineWidth = 2;
+            }
+            ctx.strokeRect(sx, sy, sw, sh);
+        });
+    };
+    img.src = 'data:image/png;base64,' + imageBase64;
+}
+
+function drawROIViewFromBase64(classification) {
+    console.log('drawROIViewFromBase64 called for ROI', classification.roi_id);
+    const canvas = document.getElementById('roi-canvas');
+    const ctx = canvas.getContext('2d');
+
+    if (!classification.roi_image_base64) {
+        console.log('No ROI image available, drawing placeholder');
+        drawPlaceholderCanvas('roi-canvas', `ROI ${classification.roi_id}`);
+        return;
+    }
+
+    const img = new Image();
+    img.onerror = (error) => {
+        console.error('Image load error in drawROIViewFromBase64:', error);
+    };
+    img.onload = () => {
+        console.log('Base64 ROI image rendered, size:', img.width, 'x', img.height);
+
+        canvas.width = 400;
+        canvas.height = 300;
+
+        const scale = Math.min(400 / img.width, 300 / img.height);
+        const scaledWidth = img.width * scale;
+        const scaledHeight = img.height * scale;
+        const offsetX = (400 - scaledWidth) / 2;
+        const offsetY = (300 - scaledHeight) / 2;
+
+        ctx.fillStyle = '#1f2937';
+        ctx.fillRect(0, 0, 400, 300);
+
+        ctx.drawImage(img, offsetX, offsetY, scaledWidth, scaledHeight);
+
+        ctx.strokeStyle = classification.orientation === 'table' ? '#10b981' : '#ef4444';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(offsetX, offsetY, scaledWidth, scaledHeight);
+    };
+    img.src = 'data:image/png;base64,' + classification.roi_image_base64;
 }
 
 function drawPlaceholderCanvas(canvasId, text) {
