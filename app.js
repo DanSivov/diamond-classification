@@ -56,9 +56,127 @@ function processFromComputer() {
     showStep('new-classification');
 }
 
-function processFromDropbox() {
-    alert('Dropbox image processing coming soon!');
-    // TODO: Implement Dropbox image selection and processing
+async function processFromDropbox() {
+    if (!dropboxClient) {
+        const confirm = window.confirm('You need to connect to Dropbox first. Connect now?');
+        if (confirm) {
+            await authenticateDropbox();
+        }
+        return;
+    }
+
+    try {
+        // Ask user for Dropbox folder path
+        const folderPath = prompt('Enter Dropbox folder path (e.g., /Diamond-Images or leave empty for root):', '/Diamond-Images');
+
+        if (folderPath === null) {
+            return; // User cancelled
+        }
+
+        const searchPath = folderPath.trim() || '';
+
+        console.log('Listing files in Dropbox folder:', searchPath);
+
+        // List files in the specified folder
+        const response = await dropboxClient.filesListFolder({
+            path: searchPath,
+            recursive: false
+        });
+
+        // Filter for image files
+        const imageExtensions = ['.jpg', '.jpeg', '.png', '.jp2'];
+        const imageFiles = response.result.entries.filter(entry => {
+            if (entry['.tag'] !== 'file') return false;
+            const ext = entry.name.substring(entry.name.lastIndexOf('.')).toLowerCase();
+            return imageExtensions.includes(ext);
+        });
+
+        if (imageFiles.length === 0) {
+            alert('No image files found in the specified Dropbox folder');
+            return;
+        }
+
+        // Show file selection dialog
+        const fileList = imageFiles.map((file, index) =>
+            `${index + 1}. ${file.name}`
+        ).join('\n');
+
+        const selection = prompt(
+            `Found ${imageFiles.length} images. Select which to process:\n\n` +
+            `Enter numbers separated by commas (e.g., "1,2,3") or "all" for all images:\n\n${fileList}`
+        );
+
+        if (!selection) return;
+
+        let selectedFiles;
+        if (selection.toLowerCase() === 'all') {
+            selectedFiles = imageFiles;
+        } else {
+            const indices = selection.split(',').map(s => parseInt(s.trim()) - 1);
+            selectedFiles = indices
+                .filter(i => i >= 0 && i < imageFiles.length)
+                .map(i => imageFiles[i]);
+        }
+
+        if (selectedFiles.length === 0) {
+            alert('No valid files selected');
+            return;
+        }
+
+        // Download images from Dropbox
+        console.log('Downloading', selectedFiles.length, 'images from Dropbox...');
+        showStep('processing');
+        showProcessingStatus(`Downloading ${selectedFiles.length} images from Dropbox...`, 0);
+
+        const downloadedFiles = [];
+        for (let i = 0; i < selectedFiles.length; i++) {
+            const file = selectedFiles[i];
+            const progress = Math.round((i / selectedFiles.length) * 30); // 0-30% for download
+            showProcessingStatus(`Downloading ${file.name}... (${i + 1}/${selectedFiles.length})`, progress);
+
+            const downloadResponse = await dropboxClient.filesDownload({
+                path: file.path_lower
+            });
+
+            const blob = downloadResponse.result.fileBlob;
+
+            // Convert Blob to File object
+            const fileObj = new File([blob], file.name, { type: blob.type || 'image/jpeg' });
+            downloadedFiles.push(fileObj);
+        }
+
+        console.log('Downloaded', downloadedFiles.length, 'files from Dropbox');
+
+        // Check if API is available
+        showProcessingStatus('Checking API availability...', 35);
+        const apiAvailable = await checkAPIHealth();
+
+        if (!apiAvailable) {
+            alert('API server not available. Download images manually and run process_batch.py locally.');
+            showStep('new-classification-source');
+            return;
+        }
+
+        // Process the downloaded images
+        showProcessingStatus('Processing images...', 40);
+
+        try {
+            if (downloadedFiles.length === 1) {
+                await processSingleImage(downloadedFiles[0]);
+            } else {
+                await processBatchImages(downloadedFiles);
+            }
+        } catch (error) {
+            console.error('Processing error:', error);
+            alert('Classification failed: ' + error.message);
+            showStep('new-classification-source');
+        }
+
+    } catch (error) {
+        console.error('Dropbox image processing failed:', error);
+        alert('Failed to process images from Dropbox: ' + error.message);
+        showStep('new-classification-source');
+    }
 }
 
 // Step 2: Load Existing Classification
