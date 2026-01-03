@@ -21,8 +21,7 @@
             <p>Upload existing classification or begin new classification</p>
 
             <div class="button-group-vertical">
-                <button onclick="uploadExisting()" class="btn-primary">Upload Existing Classification (Local)</button>
-                <button onclick="loadFromDropbox()" class="btn-primary">Load from Dropbox</button>
+                <button onclick="uploadExisting()" class="btn-primary">Upload Existing Classification</button>
                 <button onclick="beginNewClassification()" class="btn-primary">Begin New Classification</button>
             </div>
 
@@ -31,27 +30,57 @@
             </div>
         </section>
 
-        <!-- Step 2: Upload Existing -->
+        <!-- Step 2: Upload Existing - Choose Source -->
         <section id="step-upload-existing" class="step-section">
+            <h2>Upload Existing Classification</h2>
+            <p>Choose where to load from:</p>
+
+            <div class="button-group-horizontal">
+                <button onclick="uploadFromComputer()" class="btn-primary">Upload from Computer</button>
+                <button onclick="loadFromDropbox()" class="btn-primary">Load from Dropbox</button>
+            </div>
+
+            <div style="margin-top: 20px;">
+                <button onclick="goToStart()" class="btn-secondary">Back</button>
+            </div>
+        </section>
+
+        <!-- Step 2a: Upload from Computer -->
+        <section id="step-upload-computer" class="step-section">
             <h2>Upload Classification Package</h2>
             <p>Select the ZIP file containing JSON and graded images</p>
 
             <input type="file" id="existing-zip-upload" accept=".zip">
             <div class="button-group-horizontal">
                 <button onclick="loadExistingClassification()">Load Classification</button>
+                <button onclick="uploadExisting()" class="btn-secondary">Back</button>
+            </div>
+        </section>
+
+        <!-- Step 3: New Classification - Choose Source -->
+        <section id="step-new-classification-source" class="step-section">
+            <h2>New Classification</h2>
+            <p>Choose where to load images from:</p>
+
+            <div class="button-group-horizontal">
+                <button onclick="processFromComputer()" class="btn-primary">Process from Computer</button>
+                <button onclick="processFromDropbox()" class="btn-primary">Process from Dropbox</button>
+            </div>
+
+            <div style="margin-top: 20px;">
                 <button onclick="goToStart()" class="btn-secondary">Back</button>
             </div>
         </section>
 
-        <!-- Step 3: New Classification -->
+        <!-- Step 3a: New Classification - Computer -->
         <section id="step-new-classification" class="step-section">
-            <h2>New Classification</h2>
+            <h2>Process Images from Computer</h2>
             <p>Select images to classify</p>
 
             <input type="file" id="new-image-upload" accept=".jpg,.jpeg,.png,.jp2" multiple>
             <div class="button-group-horizontal">
                 <button onclick="processImages()">Process Images</button>
-                <button onclick="goToStart()" class="btn-secondary">Back</button>
+                <button onclick="beginNewClassification()" class="btn-secondary">Back</button>
             </div>
         </section>
 

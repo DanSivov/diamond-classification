@@ -44,8 +44,21 @@ function uploadExisting() {
     showStep('upload-existing');
 }
 
+function uploadFromComputer() {
+    showStep('upload-computer');
+}
+
 function beginNewClassification() {
+    showStep('new-classification-source');
+}
+
+function processFromComputer() {
     showStep('new-classification');
+}
+
+function processFromDropbox() {
+    alert('Dropbox image processing coming soon!');
+    // TODO: Implement Dropbox image selection and processing
 }
 
 // Step 2: Load Existing Classification
