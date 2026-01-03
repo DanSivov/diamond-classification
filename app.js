@@ -124,6 +124,7 @@ async function processSingleImage(file) {
 
     state.classificationData = data;
     state.uploadedImage = file;
+    console.log('Single image processed, uploadedImage set:', state.uploadedImage?.name);
     showCheckOrSave();
 }
 
@@ -151,6 +152,7 @@ async function processBatchImages(files) {
 
     if (data.results.length === 1) {
         state.classificationData = data.results[0];
+        state.uploadedImage = files[0];
     } else {
         state.classificationData = {
             image_name: 'Batch Results',
@@ -162,6 +164,7 @@ async function processBatchImages(files) {
             average_grade: data.results.reduce((sum, r) => sum + (r.average_grade || 0), 0) / data.results.length,
             classifications: data.results.flatMap(r => r.classifications || [])
         };
+        state.uploadedImage = null;
     }
 
     showCheckOrSave();
@@ -259,23 +262,36 @@ function updateVerificationDisplay() {
     orientationSpan.style.color = classification.orientation === 'table' ?
         'var(--success-color)' : 'var(--warning-color)';
 
+    console.log('updateVerificationDisplay - uploadedImage exists:', !!state.uploadedImage, 'name:', state.uploadedImage?.name);
+
     if (state.uploadedImage) {
+        console.log('Drawing actual images for ROI', classification.roi_id);
         drawContextView(classification);
         drawROIView(classification);
     } else {
+        console.log('No uploaded image, showing placeholders');
         drawPlaceholderCanvas('context-canvas', 'Context View');
         drawPlaceholderCanvas('roi-canvas', `ROI ${classification.roi_id}`);
     }
 }
 
 function drawContextView(currentClassification) {
+    console.log('drawContextView called for ROI', currentClassification.roi_id);
     const canvas = document.getElementById('context-canvas');
     const ctx = canvas.getContext('2d');
 
     const reader = new FileReader();
+    reader.onerror = (error) => {
+        console.error('FileReader error in drawContextView:', error);
+    };
     reader.onload = (e) => {
+        console.log('Image data loaded for context view');
         const img = new Image();
+        img.onerror = (error) => {
+            console.error('Image load error in drawContextView:', error);
+        };
         img.onload = () => {
+            console.log('Image rendered for context view, size:', img.width, 'x', img.height);
             const scale = Math.min(400 / img.width, 300 / img.height);
             canvas.width = 400;
             canvas.height = 300;
@@ -312,13 +328,22 @@ function drawContextView(currentClassification) {
 }
 
 function drawROIView(classification) {
+    console.log('drawROIView called for ROI', classification.roi_id);
     const canvas = document.getElementById('roi-canvas');
     const ctx = canvas.getContext('2d');
 
     const reader = new FileReader();
+    reader.onerror = (error) => {
+        console.error('FileReader error in drawROIView:', error);
+    };
     reader.onload = (e) => {
+        console.log('Image data loaded for ROI view');
         const img = new Image();
+        img.onerror = (error) => {
+            console.error('Image load error in drawROIView:', error);
+        };
         img.onload = () => {
+            console.log('Image rendered for ROI view, size:', img.width, 'x', img.height);
             const [x, y, w, h] = classification.bounding_box;
 
             canvas.width = 400;
