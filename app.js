@@ -25,6 +25,7 @@ function goToStart() {
     state.classificationData = null;
     state.verificationData = [];
     state.currentROIIndex = 0;
+    state.uploadedImage = null;
     showStep('start');
 }
 
@@ -60,15 +61,20 @@ function loadExistingClassification() {
 // Step 3: Process Images
 async function processImages() {
     const fileInput = document.getElementById('new-image-upload');
+    console.log('processImages called, fileInput:', fileInput);
+    console.log('Files selected:', fileInput.files.length);
+
     if (fileInput.files.length === 0) {
         alert('Please select images to classify');
         return;
     }
 
     const files = fileInput.files;
+    console.log('File(s) to process:', Array.from(files).map(f => f.name));
 
     // Check if API is available
     const apiAvailable = await checkAPIHealth();
+    console.log('API available:', apiAvailable);
 
     if (!apiAvailable) {
         alert('API server not available. Run images through process_batch.py locally, then upload the JSON file.');
@@ -81,11 +87,14 @@ async function processImages() {
 
     try {
         if (files.length === 1) {
+            console.log('Calling processSingleImage with file:', files[0].name);
             await processSingleImage(files[0]);
         } else {
+            console.log('Calling processBatchImages with', files.length, 'files');
             await processBatchImages(files);
         }
     } catch (error) {
+        console.error('Processing error:', error);
         alert('Classification failed: ' + error.message);
         showStep('new-classification');
     }
@@ -104,27 +113,34 @@ async function checkAPIHealth() {
 }
 
 async function processSingleImage(file) {
+    console.log('processSingleImage started with file:', file?.name, 'type:', file?.type);
+
     const formData = new FormData();
     formData.append('image', file);
 
     showProcessingStatus('Processing image...', 50);
 
+    console.log('Sending API request to:', `${state.apiUrl}/classify`);
     const response = await fetch(`${state.apiUrl}/classify`, {
         method: 'POST',
         body: formData
     });
 
+    console.log('API response received, status:', response.status);
     if (!response.ok) {
         throw new Error('Classification failed');
     }
 
     const data = await response.json();
+    console.log('API response data:', data);
 
     showProcessingStatus('Complete', 100);
 
+    console.log('Setting state.classificationData and state.uploadedImage');
     state.classificationData = data;
     state.uploadedImage = file;
     console.log('Single image processed, uploadedImage set:', state.uploadedImage?.name);
+    console.log('State.uploadedImage is now:', state.uploadedImage);
     showCheckOrSave();
 }
 
@@ -203,6 +219,7 @@ function loadFallbackResults() {
 
 // Step 4: Show Check or Save Options
 function showCheckOrSave() {
+    console.log('showCheckOrSave called, uploadedImage:', state.uploadedImage?.name);
     const summary = document.getElementById('classification-summary');
     const data = state.classificationData;
 
