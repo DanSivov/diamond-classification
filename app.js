@@ -7,6 +7,7 @@ const state = {
     currentROIIndex: 0,
     savedCodexes: [],
     uploadedImage: null,
+    batchResults: null,
     apiUrl: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
         ? 'http://localhost:5000'
         : 'https://web-production-53bec.up.railway.app'
@@ -39,23 +40,61 @@ function beginNewClassification() {
 }
 
 // Step 2: Load Existing Classification
-function loadExistingClassification() {
-    const fileInput = document.getElementById('existing-json-upload');
+async function loadExistingClassification() {
+    const fileInput = document.getElementById('existing-zip-upload');
     if (fileInput.files.length === 0) {
-        alert('Please select a JSON file');
+        alert('Please select a ZIP file');
         return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        try {
-            state.classificationData = JSON.parse(e.target.result);
-            showCheckOrSave();
-        } catch (error) {
-            alert('Error parsing JSON: ' + error.message);
+    const zipFile = fileInput.files[0];
+    console.log('Loading ZIP file:', zipFile.name);
+
+    try {
+        const zip = await JSZip.loadAsync(zipFile);
+        console.log('ZIP loaded, files:', Object.keys(zip.files));
+
+        // Find JSON file
+        let jsonFile = null;
+        let jsonFilename = null;
+        for (const [filename, file] of Object.entries(zip.files)) {
+            if (filename.endsWith('.json') && !file.dir) {
+                jsonFile = file;
+                jsonFilename = filename;
+                break;
+            }
         }
-    };
-    reader.readAsText(fileInput.files[0]);
+
+        if (!jsonFile) {
+            alert('No JSON file found in ZIP');
+            return;
+        }
+
+        console.log('Found JSON file:', jsonFilename);
+        const jsonText = await jsonFile.async('text');
+        state.classificationData = JSON.parse(jsonText);
+
+        // Find and load graded images
+        const gradedImages = {};
+        for (const [filename, file] of Object.entries(zip.files)) {
+            if (filename.endsWith('.png') && !file.dir) {
+                const base64 = await file.async('base64');
+                gradedImages[filename] = base64;
+                console.log('Loaded image:', filename);
+            }
+        }
+
+        // Match graded image to classification data
+        if (gradedImages[state.classificationData.image_name + '_graded.png']) {
+            state.classificationData.graded_image_base64 = gradedImages[state.classificationData.image_name + '_graded.png'];
+        }
+
+        console.log('Classification loaded successfully');
+        showCheckOrSave();
+    } catch (error) {
+        console.error('Error loading ZIP:', error);
+        alert('Error loading ZIP file: ' + error.message);
+    }
 }
 
 // Step 3: Process Images
@@ -170,10 +209,11 @@ async function processBatchImages(files) {
         // Single image in batch - treat as single image
         state.classificationData = data.results[0];
         state.uploadedImage = files[0];
+        state.batchResults = null;
     } else {
-        // Multiple images - store all image data with proper indexing
-        // For batch mode, we'll use the first image's base64 for context view
-        // (user should verify one image at a time)
+        // Multiple images - store all results and create merged view
+        state.batchResults = data.results;
+
         const allClassifications = [];
         let classificationIdOffset = 0;
 
@@ -642,16 +682,46 @@ function saveToCodebase(timestamp) {
     console.log('Saved to codebase:', timestamp);
 }
 
-function downloadResults() {
+async function downloadResults() {
     const timestamp = document.getElementById('save-timestamp').textContent;
+    const zipName = `verification_${timestamp}`;
 
-    const dataStr = JSON.stringify(state.verificationData, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    console.log('Creating ZIP file:', zipName);
 
-    const url = URL.createObjectURL(dataBlob);
+    const zip = new JSZip();
+
+    // Add verification JSON
+    const verificationData = {
+        timestamp: timestamp,
+        verificationData: state.verificationData,
+        classificationData: state.classificationData
+    };
+    zip.file(`${zipName}.json`, JSON.stringify(verificationData, null, 2));
+
+    // Add graded images
+    if (state.classificationData.graded_image_base64) {
+        const gradedImageName = `${state.classificationData.image_name}_graded.png`;
+        zip.file(gradedImageName, state.classificationData.graded_image_base64, {base64: true});
+        console.log('Added graded image:', gradedImageName);
+    }
+
+    // For batch processing, extract graded images from stored batch results
+    if (state.batchResults && state.batchResults.length > 0) {
+        state.batchResults.forEach(result => {
+            if (result.graded_image_base64) {
+                const gradedImageName = `${result.image_name}_graded.png`;
+                zip.file(gradedImageName, result.graded_image_base64, {base64: true});
+                console.log('Added batch graded image:', gradedImageName);
+            }
+        });
+    }
+
+    // Generate and download ZIP
+    const zipBlob = await zip.generateAsync({type: 'blob'});
+    const url = URL.createObjectURL(zipBlob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `verification_${timestamp}.json`;
+    link.download = `${zipName}.zip`;
     link.click();
 
     URL.revokeObjectURL(url);
@@ -664,14 +734,42 @@ function saveDirectly() {
     showStep('save-directly');
 }
 
-function downloadClassification() {
-    const dataStr = JSON.stringify(state.classificationData, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+async function downloadClassification() {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const imageName = state.classificationData.image_name || 'result';
+    const zipName = `classification_${imageName}_${timestamp}`;
 
-    const url = URL.createObjectURL(dataBlob);
+    console.log('Creating classification ZIP file:', zipName);
+
+    const zip = new JSZip();
+
+    // Add classification JSON
+    zip.file(`${zipName}.json`, JSON.stringify(state.classificationData, null, 2));
+
+    // Add graded images
+    if (state.classificationData.graded_image_base64) {
+        const gradedImageName = `${imageName}_graded.png`;
+        zip.file(gradedImageName, state.classificationData.graded_image_base64, {base64: true});
+        console.log('Added graded image:', gradedImageName);
+    }
+
+    // For batch processing, extract graded images from stored batch results
+    if (state.batchResults && state.batchResults.length > 0) {
+        state.batchResults.forEach(result => {
+            if (result.graded_image_base64) {
+                const gradedImageName = `${result.image_name}_graded.png`;
+                zip.file(gradedImageName, result.graded_image_base64, {base64: true});
+                console.log('Added batch graded image:', gradedImageName);
+            }
+        });
+    }
+
+    // Generate and download ZIP
+    const zipBlob = await zip.generateAsync({type: 'blob'});
+    const url = URL.createObjectURL(zipBlob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `classification_${state.classificationData.image_name || 'result'}.json`;
+    link.download = `${zipName}.zip`;
     link.click();
 
     URL.revokeObjectURL(url);

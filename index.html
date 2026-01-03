@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Diamond Classification System</title>
     <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -26,10 +27,10 @@
 
         <!-- Step 2: Upload Existing -->
         <section id="step-upload-existing" class="step-section">
-            <h2>Upload Classification JSON</h2>
-            <p>Select the classification JSON file</p>
+            <h2>Upload Classification Package</h2>
+            <p>Select the ZIP file containing JSON and graded images</p>
 
-            <input type="file" id="existing-json-upload" accept=".json">
+            <input type="file" id="existing-zip-upload" accept=".zip">
             <div class="button-group-horizontal">
                 <button onclick="loadExistingClassification()">Load Classification</button>
                 <button onclick="goToStart()" class="btn-secondary">Back</button>
