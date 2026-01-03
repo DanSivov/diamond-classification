@@ -16,7 +16,7 @@ const state = {
 // Dropbox Configuration
 const DROPBOX_CONFIG = {
     clientId: 'jyiz9jj4khq51k7',
-    redirectUri: window.location.origin + window.location.pathname,
+    redirectUri: 'https://dansivov.github.io',
     folderPath: '/Diamond-Classifier'
 };
 
