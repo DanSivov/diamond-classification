@@ -6,6 +6,7 @@
     <title>Diamond Classification System</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dropbox.js/10.34.0/Dropbox-sdk.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -20,8 +21,13 @@
             <p>Upload existing classification or begin new classification</p>
 
             <div class="button-group-vertical">
-                <button onclick="uploadExisting()" class="btn-primary">Upload Existing Classification</button>
+                <button onclick="uploadExisting()" class="btn-primary">Upload Existing Classification (Local)</button>
+                <button onclick="loadFromDropbox()" class="btn-primary">Load from Dropbox</button>
                 <button onclick="beginNewClassification()" class="btn-primary">Begin New Classification</button>
+            </div>
+
+            <div id="dropbox-status" style="margin-top: 20px; padding: 10px; background: #1f2937; border-radius: 8px; display: none;">
+                <p id="dropbox-status-text"></p>
             </div>
         </section>
 
@@ -123,23 +129,25 @@
             <h2>Verification Complete</h2>
             <div id="verification-summary"></div>
 
-            <p>Progress saved to codebase with timestamp: <span id="save-timestamp"></span></p>
-            <p>Would you like to save results to your machine?</p>
+            <p>Timestamp: <span id="save-timestamp"></span></p>
+            <p>Choose where to save your results:</p>
 
             <div class="button-group-vertical">
-                <button onclick="downloadResults()" class="btn-primary">Download Results</button>
-                <button onclick="goToStart()" class="btn-secondary">Finish</button>
+                <button onclick="saveToDropbox()" class="btn-primary">Save to Dropbox</button>
+                <button onclick="downloadResults()" class="btn-primary">Download to Computer</button>
+                <button onclick="goToStart()" class="btn-secondary">Finish Without Saving</button>
             </div>
         </section>
 
         <!-- Step 7: Save Directly -->
         <section id="step-save-directly" class="step-section">
-            <h2>Save Final Images</h2>
-            <p>Download the classification results</p>
+            <h2>Save Classification Results</h2>
+            <p>Choose where to save your classification results:</p>
 
             <div class="button-group-vertical">
-                <button onclick="downloadClassification()" class="btn-primary">Download Classification Data</button>
-                <button onclick="goToStart()" class="btn-secondary">Finish</button>
+                <button onclick="saveClassificationToDropbox()" class="btn-primary">Save to Dropbox</button>
+                <button onclick="downloadClassification()" class="btn-primary">Download to Computer</button>
+                <button onclick="goToStart()" class="btn-secondary">Finish Without Saving</button>
             </div>
         </section>
     </div>

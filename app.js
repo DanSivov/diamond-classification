@@ -13,6 +13,15 @@ const state = {
         : 'https://web-production-53bec.up.railway.app'
 };
 
+// Dropbox Configuration
+const DROPBOX_CONFIG = {
+    clientId: 'jyiz9jj4khq51k7',
+    redirectUri: window.location.origin + window.location.pathname,
+    folderPath: '/Diamond-Classifier'
+};
+
+let dropboxClient = null;
+
 // Navigation
 function showStep(stepId) {
     document.querySelectorAll('.step-section').forEach(section => {
@@ -777,9 +786,355 @@ async function downloadClassification() {
     goToStart();
 }
 
+// ========================================
+// DROPBOX INTEGRATION
+// ========================================
+
+function initializeDropbox() {
+    const accessToken = localStorage.getItem('dropboxAccessToken');
+
+    if (accessToken) {
+        dropboxClient = new Dropbox.Dropbox({ accessToken: accessToken });
+        updateDropboxStatus('Connected to Dropbox', true);
+        console.log('Dropbox client initialized with stored token');
+        return true;
+    }
+
+    // Check if we're returning from OAuth
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+
+    if (code) {
+        handleDropboxOAuthCallback(code);
+    }
+
+    return false;
+}
+
+async function authenticateDropbox() {
+    console.log('Starting Dropbox authentication...');
+
+    // Generate PKCE code verifier and challenge
+    const codeVerifier = generateCodeVerifier();
+    const codeChallenge = await generateCodeChallenge(codeVerifier);
+
+    // Store verifier for callback
+    sessionStorage.setItem('dropboxCodeVerifier', codeVerifier);
+
+    // Build OAuth URL
+    const authUrl = `https://www.dropbox.com/oauth2/authorize?` +
+        `client_id=${DROPBOX_CONFIG.clientId}&` +
+        `response_type=code&` +
+        `redirect_uri=${encodeURIComponent(DROPBOX_CONFIG.redirectUri)}&` +
+        `code_challenge_method=S256&` +
+        `code_challenge=${codeChallenge}&` +
+        `token_access_type=offline`;
+
+    // Redirect to Dropbox OAuth
+    window.location.href = authUrl;
+}
+
+async function handleDropboxOAuthCallback(code) {
+    console.log('Handling Dropbox OAuth callback');
+
+    const codeVerifier = sessionStorage.getItem('dropboxCodeVerifier');
+
+    if (!codeVerifier) {
+        console.error('Code verifier not found');
+        return;
+    }
+
+    try {
+        // Exchange code for token
+        const response = await fetch('https://api.dropboxapi.com/oauth2/token', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+                code: code,
+                grant_type: 'authorization_code',
+                code_verifier: codeVerifier,
+                client_id: DROPBOX_CONFIG.clientId,
+                redirect_uri: DROPBOX_CONFIG.redirectUri
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.access_token) {
+            localStorage.setItem('dropboxAccessToken', data.access_token);
+            dropboxClient = new Dropbox.Dropbox({ accessToken: data.access_token });
+
+            // Clean up URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+
+            updateDropboxStatus('Successfully connected to Dropbox!', true);
+            console.log('Dropbox authentication successful');
+        } else {
+            throw new Error('No access token received');
+        }
+    } catch (error) {
+        console.error('Dropbox authentication failed:', error);
+        updateDropboxStatus('Failed to connect to Dropbox', false);
+    } finally {
+        sessionStorage.removeItem('dropboxCodeVerifier');
+    }
+}
+
+function updateDropboxStatus(message, success) {
+    const statusDiv = document.getElementById('dropbox-status');
+    const statusText = document.getElementById('dropbox-status-text');
+
+    statusDiv.style.display = 'block';
+    statusText.textContent = message;
+    statusDiv.style.background = success ? '#065f46' : '#7f1d1d';
+
+    if (success) {
+        setTimeout(() => {
+            statusDiv.style.display = 'none';
+        }, 5000);
+    }
+}
+
+function generateCodeVerifier() {
+    const array = new Uint8Array(32);
+    crypto.getRandomValues(array);
+    return base64URLEncode(array);
+}
+
+async function generateCodeChallenge(verifier) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(verifier);
+    const hash = await crypto.subtle.digest('SHA-256', data);
+    return base64URLEncode(new Uint8Array(hash));
+}
+
+function base64URLEncode(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary)
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+}
+
+async function saveToDropbox() {
+    if (!dropboxClient) {
+        const confirm = window.confirm('You need to connect to Dropbox first. Connect now?');
+        if (confirm) {
+            await authenticateDropbox();
+        }
+        return;
+    }
+
+    const timestamp = document.getElementById('save-timestamp').textContent;
+    const zipName = `verification_${timestamp}`;
+
+    console.log('Creating ZIP for Dropbox upload:', zipName);
+
+    const zip = new JSZip();
+
+    // Add verification JSON
+    const verificationData = {
+        timestamp: timestamp,
+        verificationData: state.verificationData,
+        classificationData: state.classificationData
+    };
+    zip.file(`${zipName}.json`, JSON.stringify(verificationData, null, 2));
+
+    // Add graded images
+    if (state.classificationData.graded_image_base64) {
+        const gradedImageName = `${state.classificationData.image_name}_graded.png`;
+        zip.file(gradedImageName, state.classificationData.graded_image_base64, {base64: true});
+    }
+
+    if (state.batchResults && state.batchResults.length > 0) {
+        state.batchResults.forEach(result => {
+            if (result.graded_image_base64) {
+                const gradedImageName = `${result.image_name}_graded.png`;
+                zip.file(gradedImageName, result.graded_image_base64, {base64: true});
+            }
+        });
+    }
+
+    // Generate ZIP blob
+    const zipBlob = await zip.generateAsync({type: 'blob'});
+
+    // Upload to Dropbox
+    try {
+        const path = `${DROPBOX_CONFIG.folderPath}/${zipName}.zip`;
+
+        await dropboxClient.filesUpload({
+            path: path,
+            contents: zipBlob,
+            mode: 'add',
+            autorename: true
+        });
+
+        alert(`Successfully saved to Dropbox: ${path}`);
+        goToStart();
+    } catch (error) {
+        console.error('Dropbox upload failed:', error);
+        alert('Failed to save to Dropbox: ' + error.message);
+    }
+}
+
+async function saveClassificationToDropbox() {
+    if (!dropboxClient) {
+        const confirm = window.confirm('You need to connect to Dropbox first. Connect now?');
+        if (confirm) {
+            await authenticateDropbox();
+        }
+        return;
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const imageName = state.classificationData.image_name || 'result';
+    const zipName = `classification_${imageName}_${timestamp}`;
+
+    console.log('Creating classification ZIP for Dropbox:', zipName);
+
+    const zip = new JSZip();
+
+    zip.file(`${zipName}.json`, JSON.stringify(state.classificationData, null, 2));
+
+    if (state.classificationData.graded_image_base64) {
+        const gradedImageName = `${imageName}_graded.png`;
+        zip.file(gradedImageName, state.classificationData.graded_image_base64, {base64: true});
+    }
+
+    if (state.batchResults && state.batchResults.length > 0) {
+        state.batchResults.forEach(result => {
+            if (result.graded_image_base64) {
+                const gradedImageName = `${result.image_name}_graded.png`;
+                zip.file(gradedImageName, result.graded_image_base64, {base64: true});
+            }
+        });
+    }
+
+    const zipBlob = await zip.generateAsync({type: 'blob'});
+
+    try {
+        const path = `${DROPBOX_CONFIG.folderPath}/${zipName}.zip`;
+
+        await dropboxClient.filesUpload({
+            path: path,
+            contents: zipBlob,
+            mode: 'add',
+            autorename: true
+        });
+
+        alert(`Successfully saved to Dropbox: ${path}`);
+        goToStart();
+    } catch (error) {
+        console.error('Dropbox upload failed:', error);
+        alert('Failed to save to Dropbox: ' + error.message);
+    }
+}
+
+async function loadFromDropbox() {
+    if (!dropboxClient) {
+        const confirm = window.confirm('You need to connect to Dropbox first. Connect now?');
+        if (confirm) {
+            await authenticateDropbox();
+        }
+        return;
+    }
+
+    try {
+        // List files in the Diamond-Classifier folder
+        const response = await dropboxClient.filesListFolder({
+            path: DROPBOX_CONFIG.folderPath
+        });
+
+        const zipFiles = response.result.entries.filter(entry =>
+            entry['.tag'] === 'file' && entry.name.endsWith('.zip')
+        );
+
+        if (zipFiles.length === 0) {
+            alert('No saved classifications found in Dropbox');
+            return;
+        }
+
+        // Show file picker
+        const fileList = zipFiles.map((file, index) =>
+            `${index + 1}. ${file.name}`
+        ).join('\n');
+
+        const selection = prompt(`Select a file to load (enter number):\n\n${fileList}`);
+
+        if (!selection) return;
+
+        const fileIndex = parseInt(selection) - 1;
+
+        if (fileIndex < 0 || fileIndex >= zipFiles.length) {
+            alert('Invalid selection');
+            return;
+        }
+
+        const selectedFile = zipFiles[fileIndex];
+
+        // Download the file
+        const downloadResponse = await dropboxClient.filesDownload({
+            path: selectedFile.path_lower
+        });
+
+        const blob = downloadResponse.result.fileBlob;
+
+        // Process the ZIP file
+        const zip = await JSZip.loadAsync(blob);
+        console.log('ZIP loaded from Dropbox, files:', Object.keys(zip.files));
+
+        // Find JSON file
+        let jsonFile = null;
+        for (const [filename, file] of Object.entries(zip.files)) {
+            if (filename.endsWith('.json') && !file.dir) {
+                jsonFile = file;
+                break;
+            }
+        }
+
+        if (!jsonFile) {
+            alert('No JSON file found in ZIP');
+            return;
+        }
+
+        const jsonText = await jsonFile.async('text');
+        state.classificationData = JSON.parse(jsonText);
+
+        // Find and load graded images
+        const gradedImages = {};
+        for (const [filename, file] of Object.entries(zip.files)) {
+            if (filename.endsWith('.png') && !file.dir) {
+                const base64 = await file.async('base64');
+                gradedImages[filename] = base64;
+            }
+        }
+
+        // Match graded image
+        if (gradedImages[state.classificationData.image_name + '_graded.png']) {
+            state.classificationData.graded_image_base64 = gradedImages[state.classificationData.image_name + '_graded.png'];
+        }
+
+        console.log('Classification loaded from Dropbox successfully');
+        showCheckOrSave();
+
+    } catch (error) {
+        console.error('Failed to load from Dropbox:', error);
+        alert('Failed to load from Dropbox: ' + error.message);
+    }
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     console.log('Diamond Classification System loaded');
+
+    // Initialize Dropbox
+    initializeDropbox();
 
     document.getElementById('correction-modal').addEventListener('click', (e) => {
         if (e.target.id === 'correction-modal') {
