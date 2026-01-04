@@ -211,6 +211,32 @@
         </div>
     </div>
 
+    <!-- Modal for Dropbox File Browser -->
+    <div id="dropbox-browser-modal" class="modal">
+        <div class="modal-content dropbox-browser">
+            <h2>Select Images from Dropbox</h2>
+
+            <div class="breadcrumb-container">
+                <span class="breadcrumb-label">Path:</span>
+                <div id="breadcrumb-path" class="breadcrumb-path"></div>
+            </div>
+
+            <div id="file-browser-content" class="file-browser">
+                <div class="browser-loading">Loading...</div>
+            </div>
+
+            <div class="browser-footer">
+                <div class="selected-count">
+                    <span id="selected-count">0 files selected</span>
+                </div>
+                <div class="modal-buttons">
+                    <button onclick="processSelectedDropboxFiles()" class="btn-primary">Process Selected</button>
+                    <button onclick="closeDropboxBrowser()">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="app.js"></script>
 </body>
 </html>

@@ -56,6 +56,13 @@ function processFromComputer() {
     showStep('new-classification');
 }
 
+// Dropbox File Browser State
+const dropboxBrowserState = {
+    currentPath: '',
+    selectedFiles: [],
+    allEntries: []
+};
+
 async function processFromDropbox() {
     if (!dropboxClient) {
         const confirm = window.confirm('You need to connect to Dropbox first. Connect now?');
@@ -65,77 +72,204 @@ async function processFromDropbox() {
         return;
     }
 
+    // Reset browser state
+    dropboxBrowserState.currentPath = '';
+    dropboxBrowserState.selectedFiles = [];
+    dropboxBrowserState.allEntries = [];
+
+    // Show modal and load root folder
+    openDropboxBrowser();
+    await loadDropboxFolder('');
+}
+
+function openDropboxBrowser() {
+    const modal = document.getElementById('dropbox-browser-modal');
+    modal.classList.add('active');
+}
+
+function closeDropboxBrowser() {
+    const modal = document.getElementById('dropbox-browser-modal');
+    modal.classList.remove('active');
+    dropboxBrowserState.selectedFiles = [];
+    dropboxBrowserState.allEntries = [];
+}
+
+async function loadDropboxFolder(path) {
+    const content = document.getElementById('file-browser-content');
+    content.innerHTML = '<div class="browser-loading">Loading...</div>';
+
     try {
-        // Ask user for Dropbox folder path
-        const folderPath = prompt('Enter Dropbox folder path (e.g., /Diamond-Images or leave empty for root):', '/Diamond-Images');
-
-        if (folderPath === null) {
-            return; // User cancelled
-        }
-
-        const searchPath = folderPath.trim() || '';
-
-        console.log('Listing files in Dropbox folder:', searchPath);
-
-        // List files in the specified folder
         const response = await dropboxClient.filesListFolder({
-            path: searchPath,
+            path: path,
             recursive: false
         });
 
-        // Filter for image files
-        const imageExtensions = ['.jpg', '.jpeg', '.png', '.jp2'];
-        const imageFiles = response.result.entries.filter(entry => {
-            if (entry['.tag'] !== 'file') return false;
-            const ext = entry.name.substring(entry.name.lastIndexOf('.')).toLowerCase();
-            return imageExtensions.includes(ext);
-        });
+        dropboxBrowserState.currentPath = path;
+        dropboxBrowserState.allEntries = response.result.entries;
 
-        if (imageFiles.length === 0) {
-            alert('No image files found in the specified Dropbox folder');
-            return;
-        }
+        renderBreadcrumb(path);
+        renderFileList(response.result.entries);
 
-        // Show file selection dialog
-        const fileList = imageFiles.map((file, index) =>
-            `${index + 1}. ${file.name}`
-        ).join('\n');
+    } catch (error) {
+        console.error('Failed to load Dropbox folder:', error);
 
-        const selection = prompt(
-            `Found ${imageFiles.length} images. Select which to process:\n\n` +
-            `Enter numbers separated by commas (e.g., "1,2,3") or "all" for all images:\n\n${fileList}`
-        );
-
-        if (!selection) return;
-
-        let selectedFiles;
-        if (selection.toLowerCase() === 'all') {
-            selectedFiles = imageFiles;
+        // Handle 401 authentication error
+        if (error.status === 401) {
+            content.innerHTML = `
+                <div class="browser-error">
+                    <p>Session expired. Please reconnect to Dropbox.</p>
+                    <button onclick="reauthenticateDropbox()" class="btn-primary">Reconnect</button>
+                </div>
+            `;
         } else {
-            const indices = selection.split(',').map(s => parseInt(s.trim()) - 1);
-            selectedFiles = indices
-                .filter(i => i >= 0 && i < imageFiles.length)
-                .map(i => imageFiles[i]);
+            content.innerHTML = `
+                <div class="browser-error">
+                    <p>Failed to load folder: ${error.message}</p>
+                    <button onclick="loadDropboxFolder('${path}')" class="btn-primary">Retry</button>
+                </div>
+            `;
         }
+    }
+}
 
-        if (selectedFiles.length === 0) {
-            alert('No valid files selected');
-            return;
-        }
+async function reauthenticateDropbox() {
+    localStorage.removeItem('dropboxAccessToken');
+    dropboxClient = null;
+    closeDropboxBrowser();
+    await authenticateDropbox();
+}
 
+function renderBreadcrumb(path) {
+    const breadcrumbPath = document.getElementById('breadcrumb-path');
+    breadcrumbPath.innerHTML = '';
+
+    const parts = path ? path.split('/').filter(p => p) : [];
+
+    // Add root
+    const root = document.createElement('span');
+    root.className = 'breadcrumb-item';
+    root.textContent = 'Root';
+    root.onclick = () => loadDropboxFolder('');
+    breadcrumbPath.appendChild(root);
+
+    // Add path parts
+    let currentPath = '';
+    parts.forEach((part, index) => {
+        const separator = document.createElement('span');
+        separator.className = 'breadcrumb-separator';
+        separator.textContent = '/';
+        breadcrumbPath.appendChild(separator);
+
+        currentPath += '/' + part;
+        const pathPart = currentPath;
+
+        const item = document.createElement('span');
+        item.className = 'breadcrumb-item';
+        item.textContent = part;
+        item.onclick = () => loadDropboxFolder(pathPart);
+        breadcrumbPath.appendChild(item);
+    });
+}
+
+function renderFileList(entries) {
+    const content = document.getElementById('file-browser-content');
+
+    if (entries.length === 0) {
+        content.innerHTML = '<div class="browser-empty">This folder is empty</div>';
+        return;
+    }
+
+    // Separate folders and files
+    const folders = entries.filter(e => e['.tag'] === 'folder').sort((a, b) => a.name.localeCompare(b.name));
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.jp2'];
+    const files = entries
+        .filter(e => {
+            if (e['.tag'] !== 'file') return false;
+            const ext = e.name.substring(e.name.lastIndexOf('.')).toLowerCase();
+            return imageExtensions.includes(ext);
+        })
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+    const ul = document.createElement('ul');
+    ul.className = 'file-list';
+
+    // Render folders
+    folders.forEach(folder => {
+        const li = document.createElement('li');
+        li.className = 'file-item folder';
+        li.innerHTML = `
+            <span class="file-icon">📁</span>
+            <span class="file-name">${folder.name}</span>
+        `;
+        li.onclick = () => loadDropboxFolder(folder.path_lower);
+        ul.appendChild(li);
+    });
+
+    // Render image files
+    files.forEach(file => {
+        const li = document.createElement('li');
+        li.className = 'file-item file';
+        li.innerHTML = `
+            <input type="checkbox" class="file-checkbox" data-path="${file.path_lower}" data-name="${file.name}">
+            <span class="file-icon">🖼️</span>
+            <span class="file-name">${file.name}</span>
+        `;
+
+        const checkbox = li.querySelector('.file-checkbox');
+        checkbox.onchange = (e) => {
+            e.stopPropagation();
+            updateSelectedFiles();
+        };
+
+        li.onclick = (e) => {
+            if (e.target !== checkbox) {
+                checkbox.checked = !checkbox.checked;
+                updateSelectedFiles();
+            }
+        };
+
+        ul.appendChild(li);
+    });
+
+    content.innerHTML = '';
+    content.appendChild(ul);
+
+    updateSelectedFiles();
+}
+
+function updateSelectedFiles() {
+    const checkboxes = document.querySelectorAll('.file-checkbox:checked');
+    dropboxBrowserState.selectedFiles = Array.from(checkboxes).map(cb => ({
+        path: cb.dataset.path,
+        name: cb.dataset.name
+    }));
+
+    const count = dropboxBrowserState.selectedFiles.length;
+    document.getElementById('selected-count').textContent = `${count} file${count !== 1 ? 's' : ''} selected`;
+}
+
+async function processSelectedDropboxFiles() {
+    if (dropboxBrowserState.selectedFiles.length === 0) {
+        alert('Please select at least one image file');
+        return;
+    }
+
+    closeDropboxBrowser();
+
+    try {
         // Download images from Dropbox
-        console.log('Downloading', selectedFiles.length, 'images from Dropbox...');
+        console.log('Downloading', dropboxBrowserState.selectedFiles.length, 'images from Dropbox...');
         showStep('processing');
-        showProcessingStatus(`Downloading ${selectedFiles.length} images from Dropbox...`, 0);
+        showProcessingStatus(`Downloading ${dropboxBrowserState.selectedFiles.length} images from Dropbox...`, 0);
 
         const downloadedFiles = [];
-        for (let i = 0; i < selectedFiles.length; i++) {
-            const file = selectedFiles[i];
-            const progress = Math.round((i / selectedFiles.length) * 30); // 0-30% for download
-            showProcessingStatus(`Downloading ${file.name}... (${i + 1}/${selectedFiles.length})`, progress);
+        for (let i = 0; i < dropboxBrowserState.selectedFiles.length; i++) {
+            const file = dropboxBrowserState.selectedFiles[i];
+            const progress = Math.round((i / dropboxBrowserState.selectedFiles.length) * 30); // 0-30% for download
+            showProcessingStatus(`Downloading ${file.name}... (${i + 1}/${dropboxBrowserState.selectedFiles.length})`, progress);
 
             const downloadResponse = await dropboxClient.filesDownload({
-                path: file.path_lower
+                path: file.path
             });
 
             const blob = downloadResponse.result.fileBlob;
@@ -174,7 +308,14 @@ async function processFromDropbox() {
 
     } catch (error) {
         console.error('Dropbox image processing failed:', error);
-        alert('Failed to process images from Dropbox: ' + error.message);
+
+        // Handle 401 authentication error
+        if (error.status === 401) {
+            alert('Session expired. Please reconnect to Dropbox.');
+            await reauthenticateDropbox();
+        } else {
+            alert('Failed to process images from Dropbox: ' + error.message);
+        }
         showStep('new-classification-source');
     }
 }
@@ -1270,6 +1411,12 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('correction-modal').addEventListener('click', (e) => {
         if (e.target.id === 'correction-modal') {
             closeCorrectionModal();
+        }
+    });
+
+    document.getElementById('dropbox-browser-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'dropbox-browser-modal') {
+            closeDropboxBrowser();
         }
     });
 });
