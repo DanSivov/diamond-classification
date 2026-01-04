@@ -8,6 +8,11 @@ const state = {
     savedCodexes: [],
     uploadedImage: null,
     batchResults: null,
+    currentJob: null,  // Current job being processed
+    currentJobImages: null,  // Images from current job
+    currentImage: null,  // Current image being verified
+    currentROIs: null,  // ROIs from current image
+    userEmail: localStorage.getItem('userEmail') || null,  // User email for verification
     apiUrl: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
         ? 'http://localhost:5000'
         : 'https://web-production-53bec.up.railway.app'
@@ -265,7 +270,7 @@ async function processSelectedDropboxFiles() {
         showStep('processing');
         showProcessingStatus(`Downloading ${filesToDownload.length} images from Dropbox...`, 0);
 
-        const downloadedFiles = [];
+        const filesData = [];
         for (let i = 0; i < filesToDownload.length; i++) {
             const file = filesToDownload[i];
             const progress = Math.round((i / filesToDownload.length) * 30); // 0-30% for download
@@ -277,37 +282,51 @@ async function processSelectedDropboxFiles() {
 
             const blob = downloadResponse.result.fileBlob;
 
-            // Convert Blob to File object
-            const fileObj = new File([blob], file.name, { type: blob.type || 'image/jpeg' });
-            downloadedFiles.push(fileObj);
+            // Convert to ArrayBuffer then to base64
+            const arrayBuffer = await blob.arrayBuffer();
+            const uint8Array = new Uint8Array(arrayBuffer);
+            const base64 = btoa(String.fromCharCode.apply(null, uint8Array));
+
+            filesData.push({
+                filename: file.name,
+                data: Array.from(uint8Array)  // Convert to regular array for JSON
+            });
         }
 
-        console.log('Downloaded', downloadedFiles.length, 'files from Dropbox');
+        console.log('Downloaded', filesData.length, 'files from Dropbox');
 
         // Check if API is available
         showProcessingStatus('Checking API availability...', 35);
         const apiAvailable = await checkAPIHealth();
 
         if (!apiAvailable) {
-            alert('API server not available. Download images manually and run process_batch.py locally.');
+            alert('API server not available. Try again later.');
             showStep('new-classification-source');
             return;
         }
 
-        // Process the downloaded images
-        showProcessingStatus('Processing images...', 40);
+        // Create async job
+        showProcessingStatus('Creating job...', 40);
 
-        try {
-            if (downloadedFiles.length === 1) {
-                await processSingleImage(downloadedFiles[0]);
-            } else {
-                await processBatchImages(downloadedFiles);
-            }
-        } catch (error) {
-            console.error('Processing error:', error);
-            alert('Classification failed: ' + error.message);
-            showStep('new-classification-source');
+        const response = await fetch(`${state.apiUrl}/jobs/create`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ files: filesData })
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to create job');
         }
+
+        const jobData = await response.json();
+        state.currentJob = jobData;
+
+        console.log('Job created:', jobData.job_id);
+
+        // Start polling for job status
+        pollJobStatus(jobData.job_id);
 
     } catch (error) {
         console.error('Dropbox image processing failed:', error);
@@ -319,6 +338,73 @@ async function processSelectedDropboxFiles() {
         } else {
             alert('Failed to process images from Dropbox: ' + error.message);
         }
+        showStep('new-classification-source');
+    }
+}
+
+// Poll job status until complete
+async function pollJobStatus(jobId) {
+    try {
+        const response = await fetch(`${state.apiUrl}/jobs/${jobId}/status`);
+
+        if (!response.ok) {
+            throw new Error('Failed to get job status');
+        }
+
+        const job = await response.json();
+        state.currentJob = job;
+
+        console.log('Job status:', job.status, `${job.processed_images}/${job.total_images}`);
+
+        // Update UI
+        const progress = job.total_images > 0 ? Math.round((job.processed_images / job.total_images) * 100) : 0;
+        showProcessingStatus(`Processing images... ${job.processed_images}/${job.total_images}`, 40 + Math.round(progress * 0.6));
+
+        if (job.status === 'complete') {
+            // Job finished successfully
+            showProcessingStatus('Complete!', 100);
+            console.log('Job completed successfully');
+
+            // Load job results
+            await loadJobResults(jobId);
+
+        } else if (job.status === 'failed') {
+            // Job failed
+            throw new Error(job.error_message || 'Job processing failed');
+
+        } else {
+            // Still processing, poll again in 2 seconds
+            setTimeout(() => pollJobStatus(jobId), 2000);
+        }
+
+    } catch (error) {
+        console.error('Error polling job status:', error);
+        alert('Failed to check job status: ' + error.message);
+        showStep('new-classification-source');
+    }
+}
+
+// Load completed job results
+async function loadJobResults(jobId) {
+    try {
+        const response = await fetch(`${state.apiUrl}/jobs/${jobId}/images`);
+
+        if (!response.ok) {
+            throw new Error('Failed to load job results');
+        }
+
+        const data = await response.json();
+        state.currentJob = data.job;
+        state.currentJobImages = data.images;
+
+        console.log('Job results loaded:', data.images.length, 'images');
+
+        // Show job summary
+        showJobSummary();
+
+    } catch (error) {
+        console.error('Error loading job results:', error);
+        alert('Failed to load results: ' + error.message);
         showStep('new-classification-source');
     }
 }
@@ -581,6 +667,389 @@ function loadFallbackResults() {
         }
     };
     reader.readAsText(fileInput.files[0]);
+}
+
+// Show job summary after async processing
+function showJobSummary() {
+    const job = state.currentJob;
+    const images = state.currentJobImages;
+
+    if (!job || !images) {
+        alert('No job data available');
+        return;
+    }
+
+    // Calculate totals
+    const totalDiamonds = images.reduce((sum, img) => sum + img.total_diamonds, 0);
+    const totalTable = images.reduce((sum, img) => sum + img.table_count, 0);
+    const totalTilted = images.reduce((sum, img) => sum + img.tilted_count, 0);
+    const totalPickable = images.reduce((sum, img) => sum + img.pickable_count, 0);
+
+    const summary = document.getElementById('job-summary-content');
+    summary.innerHTML = `
+        <div class="summary-box">
+            <p><strong>Job ID:</strong> ${job.id.substring(0, 8)}...</p>
+            <p><strong>Images Processed:</strong> ${images.length}</p>
+            <p><strong>Total Diamonds Found:</strong> ${totalDiamonds}</p>
+            <p><strong>Table:</strong> ${totalTable}</p>
+            <p><strong>Tilted:</strong> ${totalTilted}</p>
+            <p><strong>Pickable:</strong> ${totalPickable}</p>
+        </div>
+        <div class="info-box" style="margin-top: 15px;">
+            <p><strong>Ready for Verification</strong></p>
+            <p>Click "Start Verification" to review and correct the classifications.</p>
+            <p>ROI images and graded visualizations are stored in the cloud and will load as you verify.</p>
+        </div>
+    `;
+
+    showStep('job-summary');
+}
+
+// Start verification workflow for async job
+async function startJobVerification() {
+    try {
+        // Check if user email is set
+        if (!state.userEmail) {
+            const email = prompt('Please enter your email address for verification tracking:');
+            if (!email || !email.includes('@')) {
+                alert('Valid email required for verification');
+                return;
+            }
+            state.userEmail = email;
+            localStorage.setItem('userEmail', email);
+        }
+
+        // Load first image's ROIs
+        const firstImage = state.currentJobImages[0];
+        if (!firstImage) {
+            alert('No images found in job');
+            return;
+        }
+
+        state.currentImage = firstImage;
+
+        // Fetch ROIs for this image
+        const response = await fetch(`${apiUrl}/images/${firstImage.id}/rois`);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch ROIs: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        state.currentROIs = data.rois;
+
+        if (state.currentROIs.length === 0) {
+            alert('No ROIs found for this image');
+            return;
+        }
+
+        // Start verification UI
+        startROIVerification();
+
+    } catch (error) {
+        console.error('Error starting job verification:', error);
+        alert('Failed to start verification: ' + error.message);
+    }
+}
+
+// Export verified labels from job
+async function exportJobLabels() {
+    try {
+        const jobId = state.currentJob.id;
+
+        const response = await fetch(`${apiUrl}/jobs/${jobId}/export`);
+        if (!response.ok) {
+            throw new Error(`Export failed: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+
+        // Download as JSON file
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `job_${jobId.substring(0, 8)}_labels_${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        alert(`Exported ${data.total_labels} labels`);
+
+    } catch (error) {
+        console.error('Error exporting labels:', error);
+        alert('Failed to export labels: ' + error.message);
+    }
+}
+
+// Start ROI verification for async job
+function startROIVerification() {
+    state.currentROIIndex = 0;
+    state.currentImageIndex = 0;
+    state.verificationData = [];
+
+    showStep('verification');
+    updateROIVerificationDisplay();
+
+    document.addEventListener('keydown', handleROIVerificationKeyboard);
+}
+
+// Update verification display for database ROIs
+async function updateROIVerificationDisplay() {
+    const rois = state.currentROIs;
+    const index = state.currentROIIndex;
+
+    if (index >= rois.length) {
+        // Move to next image or complete verification
+        await moveToNextImageInJob();
+        return;
+    }
+
+    const roi = rois[index];
+
+    // Update progress
+    const totalROIsInJob = state.currentJobImages.reduce((sum, img) => sum + img.total_diamonds, 0);
+    const completedROIs = state.verificationData.length;
+    const progress = ((completedROIs / totalROIsInJob) * 100);
+    document.getElementById('progress-fill').style.width = `${progress}%`;
+    document.getElementById('progress-text').textContent = `${completedROIs + 1} / ${totalROIsInJob}`;
+
+    // Update ROI info
+    document.getElementById('roi-title').textContent = `ROI ${roi.roi_index}`;
+    document.getElementById('roi-type').textContent = roi.predicted_type.toUpperCase();
+    document.getElementById('roi-orientation').textContent = roi.predicted_orientation.toUpperCase();
+    document.getElementById('roi-confidence').textContent = `${(roi.confidence * 100).toFixed(1)}%`;
+
+    // Update orientation color
+    const orientationSpan = document.getElementById('roi-orientation');
+    orientationSpan.style.color = roi.predicted_orientation === 'table' ?
+        'var(--success-color)' : 'var(--warning-color)';
+
+    // Load and display images from R2
+    await drawROIFromURL(roi);
+    await drawContextFromURL(roi);
+}
+
+// Draw ROI image from R2 URL
+async function drawROIFromURL(roi) {
+    const canvas = document.getElementById('roi-canvas');
+    const ctx = canvas.getContext('2d');
+
+    if (!roi.roi_image_url) {
+        drawPlaceholderCanvas('roi-canvas', `ROI ${roi.roi_index}`);
+        return;
+    }
+
+    try {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+
+        await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+            img.src = roi.roi_image_url;
+        });
+
+        canvas.width = 200;
+        canvas.height = 200;
+
+        const scale = Math.min(200 / img.width, 200 / img.height);
+        const scaledWidth = img.width * scale;
+        const scaledHeight = img.height * scale;
+        const offsetX = (200 - scaledWidth) / 2;
+        const offsetY = (200 - scaledHeight) / 2;
+
+        ctx.fillStyle = '#1f2937';
+        ctx.fillRect(0, 0, 200, 200);
+        ctx.drawImage(img, offsetX, offsetY, scaledWidth, scaledHeight);
+
+    } catch (error) {
+        console.error('Failed to load ROI image:', error);
+        drawPlaceholderCanvas('roi-canvas', `ROI ${roi.roi_index}`);
+    }
+}
+
+// Draw context view from graded image URL
+async function drawContextFromURL(roi) {
+    const canvas = document.getElementById('context-canvas');
+    const ctx = canvas.getContext('2d');
+
+    const currentImage = state.currentImage;
+    if (!currentImage.graded_url) {
+        drawPlaceholderCanvas('context-canvas', 'Context View');
+        return;
+    }
+
+    try {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+
+        await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+            img.src = currentImage.graded_url;
+        });
+
+        canvas.width = 400;
+        canvas.height = 300;
+
+        const scale = Math.min(400 / img.width, 300 / img.height);
+        const scaledWidth = img.width * scale;
+        const scaledHeight = img.height * scale;
+        const offsetX = (400 - scaledWidth) / 2;
+        const offsetY = (300 - scaledHeight) / 2;
+
+        ctx.fillStyle = '#1f2937';
+        ctx.fillRect(0, 0, 400, 300);
+        ctx.drawImage(img, offsetX, offsetY, scaledWidth, scaledHeight);
+
+        // Highlight current ROI
+        const [x, y, w, h] = roi.bounding_box;
+        const sx = offsetX + x * scale;
+        const sy = offsetY + y * scale;
+        const sw = w * scale;
+        const sh = h * scale;
+
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(sx, sy, sw, sh);
+
+    } catch (error) {
+        console.error('Failed to load context image:', error);
+        drawPlaceholderCanvas('context-canvas', 'Context View');
+    }
+}
+
+// Move to next image in job
+async function moveToNextImageInJob() {
+    const currentImageIndex = state.currentJobImages.findIndex(img => img.id === state.currentImage.id);
+
+    if (currentImageIndex + 1 < state.currentJobImages.length) {
+        // Load next image
+        const nextImage = state.currentJobImages[currentImageIndex + 1];
+        state.currentImage = nextImage;
+
+        // Fetch ROIs for next image
+        const response = await fetch(`${apiUrl}/images/${nextImage.id}/rois`);
+        const data = await response.json();
+        state.currentROIs = data.rois;
+
+        // Reset ROI index
+        state.currentROIIndex = 0;
+        updateROIVerificationDisplay();
+
+    } else {
+        // All images verified
+        completeJobVerification();
+    }
+}
+
+// Complete job verification
+function completeJobVerification() {
+    document.removeEventListener('keydown', handleROIVerificationKeyboard);
+
+    alert(`Verification complete! You verified ${state.verificationData.length} ROIs across ${state.currentJobImages.length} images.`);
+
+    // Show job summary again
+    showJobSummary();
+}
+
+// Handle keyboard input for ROI verification
+function handleROIVerificationKeyboard(e) {
+    if (e.key === 'y' || e.key === 'Y') {
+        verifyROICorrect();
+    } else if (e.key === 'n' || e.key === 'N') {
+        verifyROIWrong();
+    } else if (e.key === 's' || e.key === 'S') {
+        verifyROISkip();
+    } else if (e.key === 'q' || e.key === 'Q') {
+        verifyROIQuit();
+    }
+}
+
+// Verify ROI as correct
+async function verifyROICorrect() {
+    const roi = state.currentROIs[state.currentROIIndex];
+
+    try {
+        await fetch(`${apiUrl}/rois/${roi.id}/verify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_email: state.userEmail,
+                is_correct: true
+            })
+        });
+
+        state.verificationData.push({ roi_id: roi.id, is_correct: true });
+        state.currentROIIndex++;
+        updateROIVerificationDisplay();
+
+    } catch (error) {
+        console.error('Failed to submit verification:', error);
+        alert('Failed to submit verification');
+    }
+}
+
+// Verify ROI as wrong
+function verifyROIWrong() {
+    const roi = state.currentROIs[state.currentROIIndex];
+
+    // Show correction modal
+    const modal = document.getElementById('correction-modal');
+    document.getElementById('modal-prediction').textContent =
+        `${roi.predicted_type.toUpperCase()} - ${roi.predicted_orientation.toUpperCase()}`;
+
+    // Pre-select current values
+    document.getElementById('correct-orientation').value = roi.predicted_orientation;
+
+    modal.style.display = 'flex';
+}
+
+// Submit corrected ROI verification
+async function submitROICorrection() {
+    const roi = state.currentROIs[state.currentROIIndex];
+    const correctedOrientation = document.getElementById('correct-orientation').value;
+
+    try {
+        await fetch(`${apiUrl}/rois/${roi.id}/verify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_email: state.userEmail,
+                is_correct: false,
+                corrected_orientation: correctedOrientation
+            })
+        });
+
+        state.verificationData.push({
+            roi_id: roi.id,
+            is_correct: false,
+            corrected_orientation: correctedOrientation
+        });
+
+        document.getElementById('correction-modal').style.display = 'none';
+        state.currentROIIndex++;
+        updateROIVerificationDisplay();
+
+    } catch (error) {
+        console.error('Failed to submit correction:', error);
+        alert('Failed to submit correction');
+    }
+}
+
+// Skip ROI verification
+function verifyROISkip() {
+    state.currentROIIndex++;
+    updateROIVerificationDisplay();
+}
+
+// Quit ROI verification
+function verifyROIQuit() {
+    if (confirm('Are you sure you want to quit verification? Progress will be saved.')) {
+        document.removeEventListener('keydown', handleROIVerificationKeyboard);
+        showJobSummary();
+    }
 }
 
 // Step 4: Show Check or Save Options
@@ -926,24 +1395,31 @@ function verifyWrong() {
 }
 
 function submitCorrection() {
-    const classification = state.classificationData.classifications[state.currentROIIndex];
-    const correctOrientation = document.getElementById('correct-orientation').value;
-    const correctType = document.getElementById('correct-type').value;
+    // Check if we're in job verification mode or regular verification mode
+    if (state.currentJob && state.currentROIs) {
+        // Job verification mode - call async function
+        submitROICorrection();
+    } else {
+        // Regular verification mode
+        const classification = state.classificationData.classifications[state.currentROIIndex];
+        const correctOrientation = document.getElementById('correct-orientation').value;
+        const correctType = document.getElementById('correct-type').value;
 
-    state.verificationData.push({
-        roi_id: classification.roi_id,
-        predicted_type: classification.diamond_type,
-        predicted_orientation: classification.orientation,
-        confidence: classification.confidence,
-        is_correct: false,
-        verified_type: correctType,
-        verified_orientation: correctOrientation,
-        timestamp: new Date().toISOString()
-    });
+        state.verificationData.push({
+            roi_id: classification.roi_id,
+            predicted_type: classification.diamond_type,
+            predicted_orientation: classification.orientation,
+            confidence: classification.confidence,
+            is_correct: false,
+            verified_type: correctType,
+            verified_orientation: correctOrientation,
+            timestamp: new Date().toISOString()
+        });
 
-    closeCorrectionModal();
-    state.currentROIIndex++;
-    updateVerificationDisplay();
+        closeCorrectionModal();
+        state.currentROIIndex++;
+        updateVerificationDisplay();
+    }
 }
 
 function closeCorrectionModal() {
