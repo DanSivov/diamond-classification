@@ -1037,14 +1037,24 @@ async function startJobVerification() {
         console.log(`Loaded ${allROIs.length} total ROIs from ${state.currentJobImages.length} images`);
 
         // Find first unverified ROI (ROI without verification from current user)
-        let startIndex = 0;
+        let startIndex = -1;
         for (let i = 0; i < allROIs.length; i++) {
             const roi = allROIs[i];
-            const hasVerification = roi.verifications && roi.verifications.some(v => v.user_email === state.userEmail);
+            console.log(`ROI ${i}: id=${roi.id}, verifications=`, roi.verifications);
+            const hasVerification = roi.verifications && roi.verifications.length > 0 &&
+                                  roi.verifications.some(v => v.user_email === state.userEmail);
             if (!hasVerification) {
                 startIndex = i;
+                console.log(`Found first unverified ROI at index ${i}`);
                 break;
             }
+        }
+
+        // If all ROIs verified, show completion message
+        if (startIndex === -1) {
+            alert(`All ${allROIs.length} ROIs have been verified by you!`);
+            showStep('dashboard');
+            return;
         }
 
         console.log(`Resuming from ROI ${startIndex + 1} / ${allROIs.length}`);
