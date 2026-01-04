@@ -22,7 +22,7 @@ const state = {
 const DROPBOX_CONFIG = {
     clientId: 'jyiz9jj4khq51k7',
     redirectUri: 'https://dansivov.github.io/diamond-classification',
-    folderPath: ''  // Start at root folder
+    folderPath: '/sorting-robot'
 };
 
 let dropboxClient = null;
