@@ -448,7 +448,14 @@ async function processSingleImage(file) {
 
     console.log('API response received, status:', response.status);
     if (!response.ok) {
-        throw new Error('Classification failed');
+        let errorMessage = 'Classification failed';
+        try {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+            errorMessage = `Server error: ${response.status} ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
     }
 
     const data = await response.json();
@@ -473,16 +480,29 @@ async function processBatchImages(files) {
 
     showProcessingStatus(`Processing ${files.length} images...`, 50);
 
+    console.log('Sending batch request to:', `${state.apiUrl}/classify-batch`);
+    console.log('Files:', Array.from(files).map(f => f.name));
+
     const response = await fetch(`${state.apiUrl}/classify-batch`, {
         method: 'POST',
         body: formData
     });
 
+    console.log('Batch response status:', response.status);
+
     if (!response.ok) {
-        throw new Error('Batch classification failed');
+        let errorMessage = 'Batch classification failed';
+        try {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+            errorMessage = `Server error: ${response.status} ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
     }
 
     const data = await response.json();
+    console.log('Batch response data:', data);
 
     showProcessingStatus('Complete', 100);
 
