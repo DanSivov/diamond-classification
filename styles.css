@@ -309,6 +309,16 @@ canvas {
     display: block;
 }
 
+#roi-canvas.orientation-table {
+    border: 4px solid #00C853;
+    box-shadow: 0 0 8px rgba(0, 200, 83, 0.3);
+}
+
+#roi-canvas.orientation-tilted {
+    border: 4px solid #FF9500;
+    box-shadow: 0 0 8px rgba(255, 149, 0, 0.3);
+}
+
 .roi-info {
     margin-top: 16px;
     padding: 12px;

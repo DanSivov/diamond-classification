@@ -1135,14 +1135,18 @@ async function updateROIVerificationDisplay() {
     // Update ROI info
     const imageName = state.currentImage ? state.currentImage.filename : 'Unknown';
     document.getElementById('roi-title').textContent = `${imageName} - ROI ${roi.roi_index}`;
-    document.getElementById('roi-type').textContent = roi.predicted_type.toUpperCase();
     document.getElementById('roi-orientation').textContent = roi.predicted_orientation.toUpperCase();
     document.getElementById('roi-confidence').textContent = `${(roi.confidence * 100).toFixed(1)}%`;
 
     // Update orientation color
     const orientationSpan = document.getElementById('roi-orientation');
     orientationSpan.style.color = roi.predicted_orientation === 'table' ?
-        'var(--success-color)' : 'var(--warning-color)';
+        'var(--success)' : 'var(--warning)';
+
+    // Update ROI canvas border color based on orientation
+    const roiCanvas = document.getElementById('roi-canvas');
+    roiCanvas.className = ''; // Clear existing classes
+    roiCanvas.classList.add(`orientation-${roi.predicted_orientation}`);
 
     // Load and display images from R2
     await drawROIFromURL(roi);
@@ -1433,14 +1437,18 @@ function updateVerificationDisplay() {
 
     // Update ROI info
     document.getElementById('roi-title').textContent = `ROI ${classification.roi_id}`;
-    document.getElementById('roi-type').textContent = classification.diamond_type.toUpperCase();
     document.getElementById('roi-orientation').textContent = classification.orientation.toUpperCase();
     document.getElementById('roi-confidence').textContent = `${(classification.confidence * 100).toFixed(1)}%`;
 
     // Update orientation color
     const orientationSpan = document.getElementById('roi-orientation');
     orientationSpan.style.color = classification.orientation === 'table' ?
-        'var(--success-color)' : 'var(--warning-color)';
+        'var(--success)' : 'var(--warning)';
+
+    // Update ROI canvas border color based on orientation
+    const roiCanvas = document.getElementById('roi-canvas');
+    roiCanvas.className = ''; // Clear existing classes
+    roiCanvas.classList.add(`orientation-${classification.orientation}`);
 
     console.log('updateVerificationDisplay - uploadedImage exists:', !!state.uploadedImage, 'name:', state.uploadedImage?.name);
     console.log('Classification data has full_image_base64:', !!state.classificationData.full_image_base64);
