@@ -879,7 +879,7 @@ async function startJobVerification() {
         state.currentImage = firstImage;
 
         // Fetch ROIs for this image
-        const response = await fetch(`${apiUrl}/images/${firstImage.id}/rois`);
+        const response = await fetch(`${state.apiUrl}/images/${firstImage.id}/rois`);
         if (!response.ok) {
             throw new Error(`Failed to fetch ROIs: ${response.statusText}`);
         }
@@ -906,7 +906,7 @@ async function exportJobLabels() {
     try {
         const jobId = state.currentJob.id;
 
-        const response = await fetch(`${apiUrl}/jobs/${jobId}/export`);
+        const response = await fetch(`${state.apiUrl}/jobs/${jobId}/export`);
         if (!response.ok) {
             throw new Error(`Export failed: ${response.statusText}`);
         }
@@ -1080,7 +1080,7 @@ async function moveToNextImageInJob() {
         state.currentImage = nextImage;
 
         // Fetch ROIs for next image
-        const response = await fetch(`${apiUrl}/images/${nextImage.id}/rois`);
+        const response = await fetch(`${state.apiUrl}/images/${nextImage.id}/rois`);
         const data = await response.json();
         state.currentROIs = data.rois;
 
@@ -1122,7 +1122,7 @@ async function verifyROICorrect() {
     const roi = state.currentROIs[state.currentROIIndex];
 
     try {
-        await fetch(`${apiUrl}/rois/${roi.id}/verify`, {
+        await fetch(`${state.apiUrl}/rois/${roi.id}/verify`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1162,7 +1162,7 @@ async function submitROICorrection() {
     const correctedOrientation = document.getElementById('correct-orientation').value;
 
     try {
-        await fetch(`${apiUrl}/rois/${roi.id}/verify`, {
+        await fetch(`${state.apiUrl}/rois/${roi.id}/verify`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
