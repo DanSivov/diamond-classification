@@ -103,9 +103,8 @@ async function showPreviousJobs() {
     try {
         showStep('previous-jobs');
 
-        // Fetch all jobs from API
-        // TODO: Filter by user once we add user tracking to jobs
-        const response = await fetch(`${state.apiUrl}/jobs`);
+        // Fetch user's jobs from API
+        const response = await fetch(`${state.apiUrl}/jobs?user_email=${encodeURIComponent(state.userEmail)}`);
 
         if (!response.ok) {
             throw new Error('Failed to fetch jobs');
@@ -186,8 +185,8 @@ async function showManageJobs() {
     try {
         showStep('manage-jobs');
 
-        // Fetch all jobs from API
-        const response = await fetch(`${state.apiUrl}/jobs`);
+        // Fetch user's jobs from API
+        const response = await fetch(`${state.apiUrl}/jobs?user_email=${encodeURIComponent(state.userEmail)}`);
 
         if (!response.ok) {
             throw new Error('Failed to fetch jobs');
@@ -611,7 +610,10 @@ async function processSelectedDropboxFiles() {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ files: filesData })
+            body: JSON.stringify({
+                files: filesData,
+                user_email: state.userEmail  // Include user email for job isolation
+            })
         });
 
         if (!response.ok) {
