@@ -254,19 +254,22 @@ async function processSelectedDropboxFiles() {
         return;
     }
 
+    // Save selected files before closing modal (which clears the state)
+    const filesToDownload = [...dropboxBrowserState.selectedFiles];
+
     closeDropboxBrowser();
 
     try {
         // Download images from Dropbox
-        console.log('Downloading', dropboxBrowserState.selectedFiles.length, 'images from Dropbox...');
+        console.log('Downloading', filesToDownload.length, 'images from Dropbox...');
         showStep('processing');
-        showProcessingStatus(`Downloading ${dropboxBrowserState.selectedFiles.length} images from Dropbox...`, 0);
+        showProcessingStatus(`Downloading ${filesToDownload.length} images from Dropbox...`, 0);
 
         const downloadedFiles = [];
-        for (let i = 0; i < dropboxBrowserState.selectedFiles.length; i++) {
-            const file = dropboxBrowserState.selectedFiles[i];
-            const progress = Math.round((i / dropboxBrowserState.selectedFiles.length) * 30); // 0-30% for download
-            showProcessingStatus(`Downloading ${file.name}... (${i + 1}/${dropboxBrowserState.selectedFiles.length})`, progress);
+        for (let i = 0; i < filesToDownload.length; i++) {
+            const file = filesToDownload[i];
+            const progress = Math.round((i / filesToDownload.length) * 30); // 0-30% for download
+            showProcessingStatus(`Downloading ${file.name}... (${i + 1}/${filesToDownload.length})`, progress);
 
             const downloadResponse = await dropboxClient.filesDownload({
                 path: file.path
