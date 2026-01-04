@@ -134,7 +134,13 @@ function displayJobsList(jobs) {
         return;
     }
 
-    container.innerHTML = jobs.map(job => `
+    container.innerHTML = jobs.map(job => {
+        const statusColor = job.status === 'complete' ? 'var(--success)' :
+                          job.status === 'in_progress' ? 'var(--warning)' :
+                          job.status === 'ready' ? 'var(--primary)' :
+                          job.status === 'failed' ? 'var(--danger)' : 'var(--text-secondary)';
+
+        return `
         <div class="job-item" onclick="resumeJob('${job.id}')">
             <div class="job-item-header">
                 <div class="job-item-title">Job #${job.id.substring(0, 8)}</div>
@@ -146,20 +152,17 @@ function displayJobsList(jobs) {
                     <div class="job-stat-label">Images</div>
                 </div>
                 <div class="job-stat">
-                    <div class="job-stat-value">${job.processed_images}</div>
-                    <div class="job-stat-label">Processed</div>
+                    <div class="job-stat-value">${job.verified_rois || 0} / ${job.total_rois || 0}</div>
+                    <div class="job-stat-label">ROIs Verified</div>
                 </div>
                 <div class="job-stat">
-                    <div class="job-stat-value">${job.status}</div>
+                    <div class="job-stat-value" style="color: ${statusColor}">${job.status}</div>
                     <div class="job-stat-label">Status</div>
-                </div>
-                <div class="job-stat">
-                    <div class="job-stat-value">${job.total_diamonds || 0}</div>
-                    <div class="job-stat-label">Diamonds</div>
                 </div>
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 async function resumeJob(jobId) {
@@ -213,10 +216,11 @@ function displayManageJobsList(jobs) {
     }
 
     container.innerHTML = jobs.map(job => {
-        const canContinue = job.status === 'complete' && job.processed_images > 0;
+        const canContinue = (job.status === 'ready' || job.status === 'in_progress' || job.status === 'complete') && job.total_rois > 0;
         const statusColor = job.status === 'complete' ? 'var(--success)' :
-                          job.status === 'failed' ? 'var(--danger)' :
-                          'var(--warning)';
+                          job.status === 'in_progress' ? 'var(--warning)' :
+                          job.status === 'ready' ? 'var(--primary)' :
+                          job.status === 'failed' ? 'var(--danger)' : 'var(--text-secondary)';
 
         return `
             <div class="job-item" style="position: relative;">
@@ -230,16 +234,12 @@ function displayManageJobsList(jobs) {
                         <div class="job-stat-label">Images</div>
                     </div>
                     <div class="job-stat">
-                        <div class="job-stat-value">${job.processed_images}</div>
-                        <div class="job-stat-label">Processed</div>
+                        <div class="job-stat-value">${job.verified_rois || 0} / ${job.total_rois || 0}</div>
+                        <div class="job-stat-label">ROIs Verified</div>
                     </div>
                     <div class="job-stat">
                         <div class="job-stat-value" style="color: ${statusColor}">${job.status}</div>
                         <div class="job-stat-label">Status</div>
-                    </div>
-                    <div class="job-stat">
-                        <div class="job-stat-value">${job.total_diamonds || 0}</div>
-                        <div class="job-stat-label">Diamonds</div>
                     </div>
                 </div>
                 <div style="display: flex; gap: 12px; margin-top: 16px;">
@@ -1008,28 +1008,52 @@ async function startJobVerification() {
     try {
         // User is already logged in, email is in state.userEmail
 
-        // Load first image's ROIs
-        const firstImage = state.currentJobImages[0];
-        if (!firstImage) {
-            alert('No images found in job');
+        // Gather all ROIs from all images
+        const allROIs = [];
+        const imageMap = {}; // Map ROI to its image
+
+        for (const image of state.currentJobImages) {
+            // Fetch ROIs for this image
+            const response = await fetch(`${state.apiUrl}/images/${image.id}/rois`);
+            if (!response.ok) {
+                console.error(`Failed to fetch ROIs for image ${image.id}`);
+                continue;
+            }
+
+            const data = await response.json();
+
+            // Add ROIs to the list
+            for (const roi of data.rois) {
+                allROIs.push(roi);
+                imageMap[roi.id] = image;
+            }
+        }
+
+        if (allROIs.length === 0) {
+            alert('No ROIs found in this job');
             return;
         }
 
-        state.currentImage = firstImage;
+        console.log(`Loaded ${allROIs.length} total ROIs from ${state.currentJobImages.length} images`);
 
-        // Fetch ROIs for this image
-        const response = await fetch(`${state.apiUrl}/images/${firstImage.id}/rois`);
-        if (!response.ok) {
-            throw new Error(`Failed to fetch ROIs: ${response.statusText}`);
+        // Find first unverified ROI (ROI without verification from current user)
+        let startIndex = 0;
+        for (let i = 0; i < allROIs.length; i++) {
+            const roi = allROIs[i];
+            const hasVerification = roi.verifications && roi.verifications.some(v => v.user_email === state.userEmail);
+            if (!hasVerification) {
+                startIndex = i;
+                break;
+            }
         }
 
-        const data = await response.json();
-        state.currentROIs = data.rois;
+        console.log(`Resuming from ROI ${startIndex + 1} / ${allROIs.length}`);
 
-        if (state.currentROIs.length === 0) {
-            alert('No ROIs found for this image');
-            return;
-        }
+        // Store all ROIs and image map, start from the first unverified one
+        state.currentROIs = allROIs;
+        state.currentROIImageMap = imageMap;  // Store image map for later use
+        state.currentROIIndex = startIndex;
+        state.currentImage = imageMap[allROIs[startIndex].id];
 
         // Start verification UI
         startROIVerification();
@@ -1089,22 +1113,28 @@ async function updateROIVerificationDisplay() {
     const index = state.currentROIIndex;
 
     if (index >= rois.length) {
-        // Move to next image or complete verification
-        await moveToNextImageInJob();
+        // All ROIs verified - complete the verification
+        alert(`Verification complete! ${rois.length} ROIs verified.`);
+        showStep('dashboard');
         return;
     }
 
     const roi = rois[index];
 
-    // Update progress
-    const totalROIsInJob = state.currentJobImages.reduce((sum, img) => sum + img.total_diamonds, 0);
-    const completedROIs = state.verificationData.length;
-    const progress = ((completedROIs / totalROIsInJob) * 100);
+    // Update current image for this ROI
+    if (state.currentROIImageMap) {
+        state.currentImage = state.currentROIImageMap[roi.id];
+    }
+
+    // Update progress - use actual ROI index and total count
+    const totalROIs = rois.length;
+    const progress = ((index / totalROIs) * 100);
     document.getElementById('progress-fill').style.width = `${progress}%`;
-    document.getElementById('progress-text').textContent = `${completedROIs + 1} / ${totalROIsInJob}`;
+    document.getElementById('progress-text').textContent = `${index + 1} / ${totalROIs}`;
 
     // Update ROI info
-    document.getElementById('roi-title').textContent = `ROI ${roi.roi_index}`;
+    const imageName = state.currentImage ? state.currentImage.filename : 'Unknown';
+    document.getElementById('roi-title').textContent = `${imageName} - ROI ${roi.roi_index}`;
     document.getElementById('roi-type').textContent = roi.predicted_type.toUpperCase();
     document.getElementById('roi-orientation').textContent = roi.predicted_orientation.toUpperCase();
     document.getElementById('roi-confidence').textContent = `${(roi.confidence * 100).toFixed(1)}%`;
