@@ -36,12 +36,163 @@ function showStep(stepId) {
     state.currentStep = stepId;
 }
 
+// ============================================================================
+// Authentication Functions
+// ============================================================================
+
+function handleLogin() {
+    const email = document.getElementById('login-email').value.trim();
+
+    if (!email || !email.includes('@')) {
+        alert('Please enter a valid email address');
+        return;
+    }
+
+    // Save email to state and localStorage
+    state.userEmail = email;
+    localStorage.setItem('userEmail', email);
+
+    // Show user bar and header
+    document.getElementById('user-bar').style.display = 'flex';
+    document.getElementById('main-header').style.display = 'block';
+    document.getElementById('current-user-email').textContent = email;
+
+    // Go to dashboard
+    showStep('dashboard');
+}
+
+function handleLogout() {
+    if (!confirm('Are you sure you want to sign out?')) {
+        return;
+    }
+
+    // Clear state
+    state.userEmail = null;
+    state.currentJob = null;
+    state.currentJobImages = null;
+    localStorage.removeItem('userEmail');
+
+    // Hide user bar and header
+    document.getElementById('user-bar').style.display = 'none';
+    document.getElementById('main-header').style.display = 'none';
+
+    // Clear login input
+    document.getElementById('login-email').value = '';
+
+    // Return to login
+    showStep('login');
+}
+
+// Check if user is already logged in on page load
+window.addEventListener('DOMContentLoaded', () => {
+    if (state.userEmail) {
+        document.getElementById('login-email').value = state.userEmail;
+        handleLogin();
+    }
+});
+
+// ============================================================================
+// Dashboard Functions
+// ============================================================================
+
+function startNewJob() {
+    showStep('new-job-source');
+}
+
+async function showPreviousJobs() {
+    try {
+        showStep('previous-jobs');
+
+        // Fetch all jobs from API
+        // TODO: Filter by user once we add user tracking to jobs
+        const response = await fetch(`${state.apiUrl}/jobs`);
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch jobs');
+        }
+
+        const data = await response.json();
+        displayJobsList(data.jobs);
+
+    } catch (error) {
+        console.error('Error fetching jobs:', error);
+        alert('Failed to load previous jobs: ' + error.message);
+        showStep('dashboard');
+    }
+}
+
+function displayJobsList(jobs) {
+    const container = document.getElementById('jobs-list');
+
+    if (!jobs || jobs.length === 0) {
+        container.innerHTML = `
+            <div class="browser-empty">
+                <p>No previous jobs found</p>
+                <p style="margin-top: 8px;">Start a new verification job to get started</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = jobs.map(job => `
+        <div class="job-item" onclick="resumeJob('${job.id}')">
+            <div class="job-item-header">
+                <div class="job-item-title">Job #${job.id.substring(0, 8)}</div>
+                <div class="job-item-date">${new Date(job.created_at).toLocaleDateString()}</div>
+            </div>
+            <div class="job-item-stats">
+                <div class="job-stat">
+                    <div class="job-stat-value">${job.total_images}</div>
+                    <div class="job-stat-label">Images</div>
+                </div>
+                <div class="job-stat">
+                    <div class="job-stat-value">${job.processed_images}</div>
+                    <div class="job-stat-label">Processed</div>
+                </div>
+                <div class="job-stat">
+                    <div class="job-stat-value">${job.status}</div>
+                    <div class="job-stat-label">Status</div>
+                </div>
+                <div class="job-stat">
+                    <div class="job-stat-value">${job.total_diamonds || 0}</div>
+                    <div class="job-stat-label">Diamonds</div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function resumeJob(jobId) {
+    try {
+        console.log('Resuming job:', jobId);
+
+        // Load job results
+        await loadJobResults(jobId);
+
+    } catch (error) {
+        console.error('Error resuming job:', error);
+        alert('Failed to resume job: ' + error.message);
+    }
+}
+
+function selectFromDropbox() {
+    openDropboxBrowser();
+}
+
+function selectFromComputer() {
+    // TODO: Implement computer upload for new job
+    alert('Computer upload coming soon. Please use Dropbox for now.');
+    showStep('new-job-source');
+}
+
 function goToStart() {
     state.classificationData = null;
     state.verificationData = [];
     state.currentROIIndex = 0;
     state.uploadedImage = null;
-    showStep('start');
+    state.currentJob = null;
+    state.currentJobImages = null;
+    showStep('dashboard');
 }
 
 // Step 1: Start
@@ -716,16 +867,7 @@ function showJobSummary() {
 // Start verification workflow for async job
 async function startJobVerification() {
     try {
-        // Check if user email is set
-        if (!state.userEmail) {
-            const email = prompt('Please enter your email address for verification tracking:');
-            if (!email || !email.includes('@')) {
-                alert('Valid email required for verification');
-                return;
-            }
-            state.userEmail = email;
-            localStorage.setItem('userEmail', email);
-        }
+        // User is already logged in, email is in state.userEmail
 
         // Load first image's ROIs
         const firstImage = state.currentJobImages[0];

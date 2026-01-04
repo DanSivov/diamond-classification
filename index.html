@@ -10,23 +10,66 @@
 </head>
 <body>
     <div class="container">
-        <header>
+        <!-- Login Screen -->
+        <section id="step-login" class="step-section active">
+            <div class="login-container">
+                <h2>Sign In</h2>
+                <p>Enter your email to access the Diamond Classification System</p>
+
+                <input type="email" id="login-email" placeholder="your.email@example.com" autocomplete="email">
+                <button onclick="handleLogin()" class="btn-primary">Continue</button>
+            </div>
+        </section>
+
+        <!-- User Bar (shown after login) -->
+        <div id="user-bar" class="user-bar" style="display: none;">
+            <div class="user-info">
+                Signed in as <span class="user-email" id="current-user-email"></span>
+            </div>
+            <button onclick="handleLogout()" class="btn-logout">Sign Out</button>
+        </div>
+
+        <!-- Header (shown after login) -->
+        <header id="main-header" style="display: none;">
             <h1>Diamond Classification System</h1>
-            <p class="subtitle">ML-Based Diamond Orientation Detection</p>
+            <p class="subtitle">Verification and Training Data Collection</p>
         </header>
 
-        <!-- Step 1: Start -->
-        <section id="step-start" class="step-section active">
-            <h2>Get Started</h2>
-            <p>Upload existing classification or begin new classification</p>
+        <!-- Step 1: Dashboard -->
+        <section id="step-dashboard" class="step-section">
+            <h2>Dashboard</h2>
+            <p>What would you like to do?</p>
 
             <div class="button-group-vertical">
-                <button onclick="uploadExisting()" class="btn-primary">Upload Existing Classification</button>
-                <button onclick="beginNewClassification()" class="btn-primary">Begin New Classification</button>
+                <button onclick="startNewJob()" class="btn-primary">Start New Verification Job</button>
+                <button onclick="showPreviousJobs()" class="btn-primary">Continue Previous Verification</button>
+            </div>
+        </section>
+
+        <!-- Step 2: Previous Jobs List -->
+        <section id="step-previous-jobs" class="step-section">
+            <h2>Your Previous Jobs</h2>
+            <p>Select a job to continue verification</p>
+
+            <div id="jobs-list" class="job-list"></div>
+
+            <div style="margin-top: 24px;">
+                <button onclick="showStep('dashboard')" class="btn-secondary">Back to Dashboard</button>
+            </div>
+        </section>
+
+        <!-- Step 3: New Job Source Selection -->
+        <section id="step-new-job-source" class="step-section">
+            <h2>Select Image Source</h2>
+            <p>Choose where to load images from</p>
+
+            <div class="button-group-vertical">
+                <button onclick="selectFromDropbox()" class="btn-primary">Select from Dropbox</button>
+                <button onclick="selectFromComputer()" class="btn-primary">Upload from Computer</button>
             </div>
 
-            <div id="dropbox-status" style="margin-top: 20px; padding: 10px; background: #1f2937; border-radius: 8px; display: none;">
-                <p id="dropbox-status-text"></p>
+            <div style="margin-top: 24px;">
+                <button onclick="showStep('dashboard')" class="btn-secondary">Back to Dashboard</button>
             </div>
         </section>
 
