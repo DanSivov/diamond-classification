@@ -26,7 +26,10 @@
             <div class="user-info">
                 Signed in as <span class="user-email" id="current-user-email"></span>
             </div>
-            <button onclick="handleLogout()" class="btn-logout">Sign Out</button>
+            <div style="display: flex; gap: 12px;">
+                <button onclick="showManageJobs()" class="btn-logout">Manage Jobs</button>
+                <button onclick="handleLogout()" class="btn-logout">Sign Out</button>
+            </div>
         </div>
 
         <!-- Header (shown after login) -->
@@ -52,6 +55,18 @@
             <p>Select a job to continue verification</p>
 
             <div id="jobs-list" class="job-list"></div>
+
+            <div style="margin-top: 24px;">
+                <button onclick="showStep('dashboard')" class="btn-secondary">Back to Dashboard</button>
+            </div>
+        </section>
+
+        <!-- Manage Jobs Section -->
+        <section id="step-manage-jobs" class="step-section">
+            <h2>Manage Jobs</h2>
+            <p>View, continue, or delete your verification jobs</p>
+
+            <div id="manage-jobs-list" class="job-list"></div>
 
             <div style="margin-top: 24px;">
                 <button onclick="showStep('dashboard')" class="btn-secondary">Back to Dashboard</button>

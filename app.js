@@ -175,6 +175,109 @@ async function resumeJob(jobId) {
     }
 }
 
+// ============================================================================
+// Job Management Functions
+// ============================================================================
+
+async function showManageJobs() {
+    try {
+        showStep('manage-jobs');
+
+        // Fetch all jobs from API
+        const response = await fetch(`${state.apiUrl}/jobs`);
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch jobs');
+        }
+
+        const data = await response.json();
+        displayManageJobsList(data.jobs);
+
+    } catch (error) {
+        console.error('Error fetching jobs:', error);
+        alert('Failed to load jobs: ' + error.message);
+        showStep('dashboard');
+    }
+}
+
+function displayManageJobsList(jobs) {
+    const container = document.getElementById('manage-jobs-list');
+
+    if (!jobs || jobs.length === 0) {
+        container.innerHTML = `
+            <div class="browser-empty">
+                <p>No jobs found</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = jobs.map(job => {
+        const canContinue = job.status === 'complete' && job.processed_images > 0;
+        const statusColor = job.status === 'complete' ? 'var(--success)' :
+                          job.status === 'failed' ? 'var(--danger)' :
+                          'var(--warning)';
+
+        return `
+            <div class="job-item" style="position: relative;">
+                <div class="job-item-header">
+                    <div class="job-item-title">Job #${job.id.substring(0, 8)}</div>
+                    <div class="job-item-date">${new Date(job.created_at).toLocaleDateString()} ${new Date(job.created_at).toLocaleTimeString()}</div>
+                </div>
+                <div class="job-item-stats">
+                    <div class="job-stat">
+                        <div class="job-stat-value">${job.total_images}</div>
+                        <div class="job-stat-label">Images</div>
+                    </div>
+                    <div class="job-stat">
+                        <div class="job-stat-value">${job.processed_images}</div>
+                        <div class="job-stat-label">Processed</div>
+                    </div>
+                    <div class="job-stat">
+                        <div class="job-stat-value" style="color: ${statusColor}">${job.status}</div>
+                        <div class="job-stat-label">Status</div>
+                    </div>
+                    <div class="job-stat">
+                        <div class="job-stat-value">${job.total_diamonds || 0}</div>
+                        <div class="job-stat-label">Diamonds</div>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 12px; margin-top: 16px;">
+                    ${canContinue ? `<button onclick="resumeJob('${job.id}')" class="btn-primary" style="flex: 1;">Continue Verification</button>` : ''}
+                    <button onclick="confirmDeleteJob('${job.id}')" class="btn-wrong" style="flex: 1;">Delete Job</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function confirmDeleteJob(jobId) {
+    if (!confirm('Are you sure you want to delete this job? This will permanently delete all images, ROIs, and verifications associated with this job.')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${state.apiUrl}/jobs/${jobId}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to delete job');
+        }
+
+        console.log('Job deleted:', jobId);
+
+        // Refresh the jobs list
+        await showManageJobs();
+
+        alert('Job deleted successfully');
+
+    } catch (error) {
+        console.error('Error deleting job:', error);
+        alert('Failed to delete job: ' + error.message);
+    }
+}
+
 function selectFromDropbox() {
     openDropboxBrowser();
 }
