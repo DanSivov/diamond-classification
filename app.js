@@ -341,9 +341,17 @@ async function processFromDropbox() {
     await loadDropboxFolder('');
 }
 
-function openDropboxBrowser() {
+async function openDropboxBrowser() {
     const modal = document.getElementById('dropbox-browser-modal');
     modal.classList.add('active');
+
+    // Initialize Dropbox if needed
+    if (!dropboxClient) {
+        await initializeDropbox();
+    }
+
+    // Load the default folder
+    await loadDropboxFolder(DROPBOX_CONFIG.folderPath);
 }
 
 function closeDropboxBrowser() {

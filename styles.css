@@ -355,9 +355,10 @@ canvas {
 
 .modal-content.dropbox-browser {
     max-width: 720px;
-    max-height: 80vh;
+    max-height: 85vh;
     display: flex;
     flex-direction: column;
+    padding: 24px;
 }
 
 .modal-content h2 {
@@ -388,6 +389,7 @@ canvas {
 
 /* Dropbox Browser */
 .breadcrumb-container {
+    flex: 0 0 auto;
     display: flex;
     align-items: center;
     gap: 12px;
@@ -433,11 +435,11 @@ canvas {
 }
 
 .file-browser {
-    flex: 1;
+    flex: 1 1 auto;
     overflow-y: auto;
     border: 1px solid var(--border);
     background: var(--bg-primary);
-    min-height: 300px;
+    min-height: 200px;
     max-height: 400px;
 }
 
@@ -494,7 +496,8 @@ canvas {
 }
 
 .browser-footer {
-    margin-top: 20px;
+    flex: 0 0 auto;
+    margin-top: 16px;
     padding-top: 16px;
     border-top: 1px solid var(--border);
 }
