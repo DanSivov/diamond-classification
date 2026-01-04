@@ -22,7 +22,7 @@ const state = {
 const DROPBOX_CONFIG = {
     clientId: 'jyiz9jj4khq51k7',
     redirectUri: 'https://dansivov.github.io/diamond-classification',
-    folderPath: '/Diamond-Classifier'
+    folderPath: ''  // Start at root folder
 };
 
 let dropboxClient = null;
@@ -388,6 +388,18 @@ async function loadDropboxFolder(path) {
                     <button onclick="reauthenticateDropbox()" class="btn-primary">Reconnect</button>
                 </div>
             `;
+        } else if (error.status === 409) {
+            // 409 means path not found - try loading root folder
+            console.log('Path not found, loading root folder instead');
+            if (path !== '') {
+                await loadDropboxFolder('');
+            } else {
+                content.innerHTML = `
+                    <div class="browser-error">
+                        <p>Unable to access Dropbox folder. Please check your permissions.</p>
+                    </div>
+                `;
+            }
         } else {
             content.innerHTML = `
                 <div class="browser-error">
