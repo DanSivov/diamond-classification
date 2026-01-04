@@ -527,6 +527,22 @@ function updateSelectedFiles() {
     document.getElementById('selected-count').textContent = `${count} file${count !== 1 ? 's' : ''} selected`;
 }
 
+function selectAllDropboxImages() {
+    const checkboxes = document.querySelectorAll('.file-checkbox');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = true;
+    });
+    updateSelectedFiles();
+}
+
+function deselectAllDropboxImages() {
+    const checkboxes = document.querySelectorAll('.file-checkbox');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    updateSelectedFiles();
+}
+
 async function processSelectedDropboxFiles() {
     if (dropboxBrowserState.selectedFiles.length === 0) {
         alert('Please select at least one image file');
