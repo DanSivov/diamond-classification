@@ -525,10 +525,10 @@ async function processBatchImages(files) {
             if (result.classifications) {
                 result.classifications.forEach(c => {
                     // Add image metadata to each classification
+                    // Note: Batch results don't include images to reduce response size
                     allClassifications.push({
                         ...c,
                         source_image_name: result.image_name,
-                        source_image_base64: result.full_image_base64,
                         roi_id: classificationIdOffset + c.roi_id
                     });
                 });
@@ -544,7 +544,6 @@ async function processBatchImages(files) {
             pickable_count: data.results.reduce((sum, r) => sum + (r.pickable_count || 0), 0),
             invalid_count: data.results.reduce((sum, r) => sum + (r.invalid_count || 0), 0),
             average_grade: data.results.reduce((sum, r) => sum + (r.average_grade || 0), 0) / data.results.length,
-            full_image_base64: data.results[0]?.full_image_base64,
             classifications: allClassifications
         };
         state.uploadedImage = null;
@@ -590,6 +589,14 @@ function showCheckOrSave() {
     const summary = document.getElementById('classification-summary');
     const data = state.classificationData;
 
+    const isBatch = state.batchResults && state.batchResults.length > 1;
+    const batchNote = isBatch ? `
+        <div class="info-box" style="margin-top: 15px; font-size: 0.9em;">
+            <p><strong>Note:</strong> Batch processing includes classification data only.
+            Visualization images are not included to reduce response size and improve performance.</p>
+        </div>
+    ` : '';
+
     summary.innerHTML = `
         <div class="summary-box">
             <p><strong>Image:</strong> ${data.image_name || 'Unknown'}</p>
@@ -598,6 +605,7 @@ function showCheckOrSave() {
             <p><strong>Tilted:</strong> ${data.tilted_count || 0}</p>
             <p><strong>Pickable:</strong> ${data.pickable_count || 0}</p>
         </div>
+        ${batchNote}
     `;
 
     showStep('check-or-save');
