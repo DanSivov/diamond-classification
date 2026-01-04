@@ -282,14 +282,22 @@ async function processSelectedDropboxFiles() {
 
             const blob = downloadResponse.result.fileBlob;
 
-            // Convert to ArrayBuffer then to base64
+            // Convert to base64 for efficient JSON transfer
             const arrayBuffer = await blob.arrayBuffer();
             const uint8Array = new Uint8Array(arrayBuffer);
-            const base64 = btoa(String.fromCharCode.apply(null, uint8Array));
+
+            // Convert to base64 in chunks to avoid stack overflow on large files
+            let base64 = '';
+            const chunkSize = 32768; // 32KB chunks
+            for (let i = 0; i < uint8Array.length; i += chunkSize) {
+                const chunk = uint8Array.subarray(i, i + chunkSize);
+                base64 += String.fromCharCode.apply(null, chunk);
+            }
+            base64 = btoa(base64);
 
             filesData.push({
                 filename: file.name,
-                data: Array.from(uint8Array)  // Convert to regular array for JSON
+                data: base64  // Send as base64 string instead of array
             });
         }
 
