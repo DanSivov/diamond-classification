@@ -167,6 +167,15 @@ button:disabled {
     background: var(--border);
 }
 
+.btn-sam-fail {
+    background: #9B59B6;
+    color: white;
+}
+
+.btn-sam-fail:hover {
+    background: #8E44AD;
+}
+
 /* Button Groups */
 .button-group-vertical {
     display: flex;
@@ -183,7 +192,7 @@ button:disabled {
 
 .button-group-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 12px;
 }
 

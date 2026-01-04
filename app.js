@@ -1643,6 +1643,9 @@ function handleVerificationKeyboard(event) {
         case 'n':
             verifyWrong();
             break;
+        case 'f':
+            verifySAMFailure();
+            break;
         case 's':
             verifySkip();
             break;
@@ -1652,35 +1655,129 @@ function handleVerificationKeyboard(event) {
     }
 }
 
-function verifyCorrect() {
-    const classification = state.classificationData.classifications[state.currentROIIndex];
+async function verifyCorrect() {
+    // Check if we're in job verification mode or regular verification mode
+    if (state.currentJob && state.currentROIs) {
+        // Job verification mode - submit to API
+        const roi = state.currentROIs[state.currentROIIndex];
 
-    state.verificationData.push({
-        roi_id: classification.roi_id,
-        predicted_type: classification.diamond_type,
-        predicted_orientation: classification.orientation,
-        confidence: classification.confidence,
-        is_correct: true,
-        verified_type: classification.diamond_type,
-        verified_orientation: classification.orientation,
-        timestamp: new Date().toISOString()
-    });
+        try {
+            await fetch(`${state.apiUrl}/rois/${roi.id}/verify`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_email: state.userEmail,
+                    is_correct: true
+                })
+            });
 
-    state.currentROIIndex++;
-    updateVerificationDisplay();
+            state.verificationData.push({
+                roi_id: roi.id,
+                is_correct: true
+            });
+
+            state.currentROIIndex++;
+            updateROIVerificationDisplay();
+
+        } catch (error) {
+            console.error('Failed to submit verification:', error);
+            alert('Failed to submit verification');
+        }
+    } else {
+        // Regular verification mode
+        const classification = state.classificationData.classifications[state.currentROIIndex];
+
+        state.verificationData.push({
+            roi_id: classification.roi_id,
+            predicted_type: classification.diamond_type,
+            predicted_orientation: classification.orientation,
+            confidence: classification.confidence,
+            is_correct: true,
+            verified_type: classification.diamond_type,
+            verified_orientation: classification.orientation,
+            timestamp: new Date().toISOString()
+        });
+
+        state.currentROIIndex++;
+        updateVerificationDisplay();
+    }
 }
 
 function verifyWrong() {
-    const classification = state.classificationData.classifications[state.currentROIIndex];
+    // Check if we're in job verification mode or regular verification mode
+    if (state.currentJob && state.currentROIs) {
+        // Job verification mode
+        const roi = state.currentROIs[state.currentROIIndex];
+        const modal = document.getElementById('correction-modal');
+        document.getElementById('modal-prediction').textContent =
+            `${roi.predicted_type.toUpperCase()}, ${roi.predicted_orientation.toUpperCase()}`;
 
-    const modal = document.getElementById('correction-modal');
-    document.getElementById('modal-prediction').textContent =
-        `${classification.diamond_type.toUpperCase()}, ${classification.orientation.toUpperCase()}`;
+        document.getElementById('correct-orientation').value = roi.predicted_orientation;
+        document.getElementById('correct-type').value = roi.predicted_type;
 
-    document.getElementById('correct-orientation').value = classification.orientation;
-    document.getElementById('correct-type').value = classification.diamond_type;
+        modal.classList.add('active');
+    } else {
+        // Regular verification mode
+        const classification = state.classificationData.classifications[state.currentROIIndex];
+        const modal = document.getElementById('correction-modal');
+        document.getElementById('modal-prediction').textContent =
+            `${classification.diamond_type.toUpperCase()}, ${classification.orientation.toUpperCase()}`;
 
-    modal.classList.add('active');
+        document.getElementById('correct-orientation').value = classification.orientation;
+        document.getElementById('correct-type').value = classification.diamond_type;
+
+        modal.classList.add('active');
+    }
+}
+
+async function verifySAMFailure() {
+    // Check if we're in job verification mode or regular verification mode
+    if (state.currentJob && state.currentROIs) {
+        // Job verification mode - submit to API with SAM failure note
+        const roi = state.currentROIs[state.currentROIIndex];
+
+        try {
+            await fetch(`${state.apiUrl}/rois/${roi.id}/verify`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_email: state.userEmail,
+                    is_correct: false,
+                    notes: 'SAM_FAILURE: Detection error (merged/partial diamond)'
+                })
+            });
+
+            state.verificationData.push({
+                roi_id: roi.id,
+                is_correct: false,
+                notes: 'SAM_FAILURE'
+            });
+
+            state.currentROIIndex++;
+            updateROIVerificationDisplay();
+
+        } catch (error) {
+            console.error('Failed to submit SAM failure:', error);
+            alert('Failed to submit SAM failure');
+        }
+    } else {
+        // Regular verification mode
+        const classification = state.classificationData.classifications[state.currentROIIndex];
+
+        state.verificationData.push({
+            roi_id: classification.roi_id,
+            predicted_type: classification.diamond_type,
+            predicted_orientation: classification.orientation,
+            confidence: classification.confidence,
+            is_correct: false,
+            sam_failure: true,
+            notes: 'SAM detection error (merged/partial diamond)',
+            timestamp: new Date().toISOString()
+        });
+
+        state.currentROIIndex++;
+        updateVerificationDisplay();
+    }
 }
 
 function submitCorrection() {
