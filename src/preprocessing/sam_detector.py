@@ -224,10 +224,9 @@ class SAMDiamondDetector:
                 aspect_ratio = minor_axis / major_axis if major_axis > 0 else 0
 
                 # Detect diamond type based on aspect ratio
+                # Only distinguish between round (circular) and other (non-circular)
                 if aspect_ratio > 0.85:
                     detected_type = 'round'
-                elif aspect_ratio < 0.70:
-                    detected_type = 'emerald'
                 else:
                     detected_type = 'other'
 
