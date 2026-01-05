@@ -1753,30 +1753,53 @@ async function verifyCorrect() {
     }
 }
 
-function verifyWrong() {
+async function verifyWrong() {
     // Check if we're in job verification mode or regular verification mode
     if (state.currentJob && state.currentROIs) {
-        // Job verification mode
+        // Job verification mode - automatically flip orientation and submit
         const roi = state.currentROIs[state.currentROIIndex];
-        const modal = document.getElementById('correction-modal');
-        document.getElementById('modal-prediction').textContent =
-            `${roi.predicted_type.toUpperCase()}, ${roi.predicted_orientation.toUpperCase()}`;
 
-        document.getElementById('correct-orientation').value = roi.predicted_orientation;
-        document.getElementById('correct-type').value = roi.predicted_type;
+        // Flip the orientation: table → tilted, tilted → table
+        const correctedOrientation = roi.predicted_orientation === 'table' ? 'tilted' : 'table';
 
-        modal.classList.add('active');
+        try {
+            await fetch(`${state.apiUrl}/rois/${roi.id}/verify`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_email: state.userEmail,
+                    is_correct: false,
+                    corrected_orientation: correctedOrientation
+                })
+            });
+
+            state.currentROIIndex++;
+            updateROIVerificationDisplay();
+
+        } catch (error) {
+            console.error('Failed to submit correction:', error);
+            alert('Failed to submit correction');
+        }
     } else {
-        // Regular verification mode
+        // Regular verification mode - automatically flip orientation
         const classification = state.classificationData.classifications[state.currentROIIndex];
-        const modal = document.getElementById('correction-modal');
-        document.getElementById('modal-prediction').textContent =
-            `${classification.diamond_type.toUpperCase()}, ${classification.orientation.toUpperCase()}`;
 
-        document.getElementById('correct-orientation').value = classification.orientation;
-        document.getElementById('correct-type').value = classification.diamond_type;
+        // Flip the orientation: table → tilted, tilted → table
+        const correctedOrientation = classification.orientation === 'table' ? 'tilted' : 'table';
 
-        modal.classList.add('active');
+        state.verificationData.push({
+            roi_id: classification.roi_id,
+            predicted_type: classification.diamond_type,
+            predicted_orientation: classification.orientation,
+            confidence: classification.confidence,
+            is_correct: false,
+            verified_type: classification.diamond_type,  // Keep same type
+            verified_orientation: correctedOrientation,  // Flip orientation
+            timestamp: new Date().toISOString()
+        });
+
+        state.currentROIIndex++;
+        updateVerificationDisplay();
     }
 }
 
