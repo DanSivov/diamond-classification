@@ -1327,19 +1327,32 @@ async function verifyROICorrect() {
     }
 }
 
-// Verify ROI as wrong
-function verifyROIWrong() {
+// Verify ROI as wrong - auto-flip orientation without modal
+async function verifyROIWrong() {
     const roi = state.currentROIs[state.currentROIIndex];
 
-    // Show correction modal
-    const modal = document.getElementById('correction-modal');
-    document.getElementById('modal-prediction').textContent =
-        `${roi.predicted_type.toUpperCase()} - ${roi.predicted_orientation.toUpperCase()}`;
+    // Flip the orientation: table → tilted, tilted → table
+    const correctedOrientation = roi.predicted_orientation === 'table' ? 'tilted' : 'table';
 
-    // Pre-select current values
-    document.getElementById('correct-orientation').value = roi.predicted_orientation;
+    try {
+        await fetch(`${state.apiUrl}/rois/${roi.id}/verify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_email: state.userEmail,
+                is_correct: false,
+                corrected_orientation: correctedOrientation
+            })
+        });
 
-    modal.style.display = 'flex';
+        state.verificationData.push({ roi_id: roi.id, is_correct: false });
+        state.currentROIIndex++;
+        updateROIVerificationDisplay();
+
+    } catch (error) {
+        console.error('Failed to submit correction:', error);
+        alert('Failed to submit correction');
+    }
 }
 
 // Submit corrected ROI verification
