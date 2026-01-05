@@ -1109,7 +1109,8 @@ async function exportJobLabels() {
 
 // Start ROI verification for async job
 function startROIVerification() {
-    state.currentROIIndex = 0;
+    // DON'T reset currentROIIndex here - it's already set by the calling function
+    // to resume from the correct position
     state.currentImageIndex = 0;
     state.verificationData = [];
 
