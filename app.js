@@ -660,10 +660,10 @@ async function pollJobStatus(jobId) {
         const progress = job.total_images > 0 ? Math.round((job.processed_images / job.total_images) * 100) : 0;
         showProcessingStatus(`Processing images... ${job.processed_images}/${job.total_images}`, 40 + Math.round(progress * 0.6));
 
-        if (job.status === 'complete') {
-            // Job finished successfully
+        if (job.status === 'ready' || job.status === 'complete' || job.status === 'in_progress') {
+            // Job finished processing and ready for verification
             showProcessingStatus('Complete!', 100);
-            console.log('Job completed successfully');
+            console.log('Job ready for verification');
 
             // Load job results
             await loadJobResults(jobId);
