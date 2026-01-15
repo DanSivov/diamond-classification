@@ -26,6 +26,13 @@ const DROPBOX_CONFIG = {
     folderPath: '/sorting-robot'
 };
 
+// Admin Configuration
+const ADMIN_EMAIL = 'sivovolenkodaniil@gmail.com';
+
+function isAdmin() {
+    return state.userEmail && state.userEmail.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+}
+
 let dropboxClient = null;
 
 // Navigation
@@ -57,6 +64,12 @@ function handleLogin() {
     document.getElementById('user-bar').style.display = 'flex';
     document.getElementById('main-header').style.display = 'block';
     document.getElementById('current-user-email').textContent = email;
+
+    // Show/hide admin panel button based on admin status
+    const adminBtn = document.getElementById('admin-panel-btn');
+    if (adminBtn) {
+        adminBtn.style.display = isAdmin() ? 'inline-block' : 'none';
+    }
 
     // Go to dashboard
     showStep('dashboard');
@@ -262,25 +275,314 @@ async function confirmDeleteJob(jobId) {
     }
 
     try {
-        const response = await fetch(`${state.apiUrl}/jobs/${jobId}`, {
+        const response = await fetch(`${state.apiUrl}/jobs/${jobId}?requester_email=${encodeURIComponent(state.userEmail)}`, {
             method: 'DELETE'
         });
 
         if (!response.ok) {
-            throw new Error('Failed to delete job');
+            const data = await response.json();
+            throw new Error(data.error || 'Failed to delete job');
         }
 
-        console.log('Job deleted:', jobId);
+        const result = await response.json();
+        console.log('Job deleted:', jobId, 'R2 files deleted:', result.r2_files_deleted);
 
         // Refresh the jobs list
         await showManageJobs();
 
-        alert('Job deleted successfully');
+        alert(`Job deleted successfully. ${result.r2_files_deleted || 0} storage files cleaned up.`);
 
     } catch (error) {
         console.error('Error deleting job:', error);
         alert('Failed to delete job: ' + error.message);
     }
+}
+
+// ============================================================================
+// Admin Panel Functions
+// ============================================================================
+
+async function showAdminPanel() {
+    if (!isAdmin()) {
+        alert('Unauthorized: Admin access required');
+        return;
+    }
+
+    showStep('admin-panel');
+    await loadAdminUsers();
+}
+
+function showAdminTab(tabName) {
+    // Update tab buttons
+    document.querySelectorAll('.admin-tab').forEach(tab => tab.classList.remove('active'));
+    document.getElementById(`tab-${tabName}`).classList.add('active');
+
+    // Update tab content visibility
+    document.querySelectorAll('.admin-tab-content').forEach(content => content.style.display = 'none');
+    document.getElementById(`admin-${tabName}-tab`).style.display = 'block';
+
+    // Load data for selected tab
+    if (tabName === 'users') {
+        loadAdminUsers();
+    } else if (tabName === 'jobs') {
+        loadAdminJobs();
+    } else if (tabName === 'activity') {
+        loadAdminActivity();
+    }
+}
+
+async function loadAdminUsers() {
+    try {
+        const response = await fetch(`${state.apiUrl}/admin/users?requester_email=${encodeURIComponent(state.userEmail)}`);
+
+        if (!response.ok) {
+            if (response.status === 403) {
+                throw new Error('Unauthorized - admin access required');
+            }
+            throw new Error('Failed to fetch users');
+        }
+
+        const data = await response.json();
+        displayAdminUsers(data.users);
+
+        // Populate user filter dropdown
+        const filterSelect = document.getElementById('admin-user-filter');
+        filterSelect.innerHTML = '<option value="">All users</option>';
+        data.users.forEach(user => {
+            filterSelect.innerHTML += `<option value="${user.email}">${user.email}</option>`;
+        });
+
+    } catch (error) {
+        console.error('Error loading admin users:', error);
+        document.getElementById('admin-users-list').innerHTML = `
+            <div class="browser-empty">
+                <p>Error: ${error.message}</p>
+            </div>
+        `;
+    }
+}
+
+function displayAdminUsers(users) {
+    const container = document.getElementById('admin-users-list');
+
+    if (!users || users.length === 0) {
+        container.innerHTML = `
+            <div class="browser-empty">
+                <p>No users found</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = users.map(user => `
+        <div class="job-item" onclick="filterAdminJobsByUser('${user.email}')">
+            <div class="job-item-header">
+                <div class="job-item-title">${user.email}</div>
+                <div class="job-item-date">Last active: ${user.last_activity ? new Date(user.last_activity).toLocaleDateString() : 'Never'}</div>
+            </div>
+            <div class="job-item-stats">
+                <div class="job-stat">
+                    <div class="job-stat-value">${user.job_count}</div>
+                    <div class="job-stat-label">Jobs</div>
+                </div>
+                <div class="job-stat">
+                    <div class="job-stat-value">${user.total_rois || 0}</div>
+                    <div class="job-stat-label">Total ROIs</div>
+                </div>
+                <div class="job-stat">
+                    <div class="job-stat-value">${user.verified_rois || 0}</div>
+                    <div class="job-stat-label">Verified</div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function filterAdminJobsByUser(email) {
+    document.getElementById('admin-user-filter').value = email;
+    showAdminTab('jobs');
+}
+
+async function loadAdminJobs(userFilter = null) {
+    try {
+        let url = `${state.apiUrl}/admin/jobs?requester_email=${encodeURIComponent(state.userEmail)}`;
+
+        if (!userFilter) {
+            userFilter = document.getElementById('admin-user-filter').value;
+        }
+
+        if (userFilter) {
+            url += `&user_email=${encodeURIComponent(userFilter)}`;
+        }
+
+        const response = await fetch(url);
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch jobs');
+        }
+
+        const data = await response.json();
+        displayAdminJobs(data.jobs);
+
+    } catch (error) {
+        console.error('Error loading admin jobs:', error);
+        document.getElementById('admin-jobs-list').innerHTML = `
+            <div class="browser-empty">
+                <p>Error: ${error.message}</p>
+            </div>
+        `;
+    }
+}
+
+function filterAdminJobs() {
+    loadAdminJobs();
+}
+
+function displayAdminJobs(jobs) {
+    const container = document.getElementById('admin-jobs-list');
+
+    if (!jobs || jobs.length === 0) {
+        container.innerHTML = `
+            <div class="browser-empty">
+                <p>No jobs found</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = jobs.map(job => {
+        const statusColor = job.status === 'complete' ? 'var(--success)' :
+                          job.status === 'in_progress' ? 'var(--warning)' :
+                          job.status === 'ready' ? 'var(--primary)' :
+                          job.status === 'failed' ? 'var(--danger)' : 'var(--text-secondary)';
+
+        const lastGraded = job.last_verification_at
+            ? new Date(job.last_verification_at).toLocaleString()
+            : 'Never';
+
+        return `
+            <div class="job-item">
+                <div class="job-item-header">
+                    <div class="job-item-title">Job #${job.id.substring(0, 8)}</div>
+                    <div class="job-item-date">Created: ${new Date(job.created_at).toLocaleString()}</div>
+                </div>
+                <div class="job-owner">Owner: ${job.user_email || 'Unknown'}</div>
+                <div class="job-item-stats">
+                    <div class="job-stat">
+                        <div class="job-stat-value">${job.total_images}</div>
+                        <div class="job-stat-label">Images</div>
+                    </div>
+                    <div class="job-stat">
+                        <div class="job-stat-value">${job.verified_rois || 0} / ${job.total_rois || 0}</div>
+                        <div class="job-stat-label">ROIs Verified</div>
+                    </div>
+                    <div class="job-stat">
+                        <div class="job-stat-value" style="color: ${statusColor}">${job.status}</div>
+                        <div class="job-stat-label">Status</div>
+                    </div>
+                </div>
+                <div class="job-last-graded">Last verification: ${lastGraded}</div>
+                <div style="display: flex; gap: 12px; margin-top: 16px;">
+                    <button onclick="adminDeleteJob('${job.id}')" class="btn-wrong" style="flex: 1;">Delete Job</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function adminDeleteJob(jobId) {
+    if (!confirm('Are you sure you want to delete this job? This will permanently delete all images, ROIs, verifications, AND storage files.')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${state.apiUrl}/jobs/${jobId}?requester_email=${encodeURIComponent(state.userEmail)}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.error || 'Failed to delete job');
+        }
+
+        const result = await response.json();
+        console.log('Job deleted:', jobId, 'R2 files deleted:', result.r2_files_deleted);
+
+        // Refresh the jobs list
+        await loadAdminJobs();
+
+        alert(`Job deleted successfully. ${result.r2_files_deleted || 0} storage files cleaned up.`);
+
+    } catch (error) {
+        console.error('Error deleting job:', error);
+        alert('Failed to delete job: ' + error.message);
+    }
+}
+
+async function loadAdminActivity() {
+    try {
+        const response = await fetch(`${state.apiUrl}/admin/activity?requester_email=${encodeURIComponent(state.userEmail)}&limit=50`);
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch activity');
+        }
+
+        const data = await response.json();
+        displayAdminActivity(data.activity);
+
+    } catch (error) {
+        console.error('Error loading admin activity:', error);
+        document.getElementById('admin-activity-list').innerHTML = `
+            <div class="browser-empty">
+                <p>Error: ${error.message}</p>
+            </div>
+        `;
+    }
+}
+
+function displayAdminActivity(activity) {
+    const container = document.getElementById('admin-activity-list');
+
+    if (!activity || activity.length === 0) {
+        container.innerHTML = `
+            <div class="browser-empty">
+                <p>No recent activity</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = activity.map(item => {
+        const timestamp = new Date(item.timestamp).toLocaleString();
+
+        if (item.type === 'verification') {
+            const statusIcon = item.is_correct ? '(correct)' : '(corrected)';
+            return `
+                <div class="activity-item">
+                    <div class="activity-icon verification-icon">V</div>
+                    <div class="activity-details">
+                        <div class="activity-title">${item.user_email} verified ROI #${item.roi_index} ${statusIcon}</div>
+                        <div class="activity-meta">
+                            Job: ${item.job_id.substring(0, 8)} | Image: ${item.image_filename} | ${timestamp}
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else if (item.type === 'job_created') {
+            return `
+                <div class="activity-item">
+                    <div class="activity-icon job-icon">J</div>
+                    <div class="activity-details">
+                        <div class="activity-title">${item.user_email || 'Unknown'} created job with ${item.total_images} images</div>
+                        <div class="activity-meta">
+                            Job: ${item.job_id.substring(0, 8)} | ${timestamp}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        return '';
+    }).join('');
 }
 
 function selectFromDropbox() {

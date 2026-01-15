@@ -719,3 +719,136 @@ canvas {
         opacity: 0;
     }
 }
+
+/* Admin Panel Styles */
+.admin-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 12px;
+}
+
+.admin-tab {
+    padding: 10px 20px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: all 0.2s;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.admin-tab:hover {
+    background: var(--bg-tertiary);
+}
+
+.admin-tab.active {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+
+.admin-tab-content {
+    min-height: 300px;
+}
+
+.admin-filter {
+    margin-bottom: 16px;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+}
+
+.admin-filter label {
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.admin-filter select {
+    margin-left: 8px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 14px;
+    min-width: 200px;
+}
+
+.admin-filter select:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.job-owner {
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin: 4px 0 8px 0;
+}
+
+.job-last-graded {
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+}
+
+.activity-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.activity-item {
+    display: flex;
+    align-items: flex-start;
+    padding: 12px 16px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    gap: 12px;
+}
+
+.activity-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.activity-icon.verification-icon {
+    background: var(--success);
+}
+
+.activity-icon.job-icon {
+    background: var(--primary);
+}
+
+.activity-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.activity-title {
+    font-weight: 500;
+    margin-bottom: 4px;
+    color: var(--text-primary);
+}
+
+.activity-meta {
+    font-size: 13px;
+    color: var(--text-secondary);
+}

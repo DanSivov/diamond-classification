@@ -27,6 +27,7 @@
                 Signed in as <span class="user-email" id="current-user-email"></span>
             </div>
             <div style="display: flex; gap: 12px;">
+                <button id="admin-panel-btn" onclick="showAdminPanel()" class="btn-logout" style="display: none;">Admin Panel</button>
                 <button onclick="showManageJobs()" class="btn-logout">Manage Jobs</button>
                 <button onclick="handleLogout()" class="btn-logout">Sign Out</button>
             </div>
@@ -67,6 +68,40 @@
             <p>View, continue, or delete your verification jobs</p>
 
             <div id="manage-jobs-list" class="job-list"></div>
+
+            <div style="margin-top: 24px;">
+                <button onclick="showStep('dashboard')" class="btn-secondary">Back to Dashboard</button>
+            </div>
+        </section>
+
+        <!-- Admin Panel Section -->
+        <section id="step-admin-panel" class="step-section">
+            <h2>Admin Panel</h2>
+            <p>System administration and monitoring</p>
+
+            <div class="admin-tabs">
+                <button onclick="showAdminTab('users')" class="admin-tab active" id="tab-users">Users</button>
+                <button onclick="showAdminTab('jobs')" class="admin-tab" id="tab-jobs">All Jobs</button>
+                <button onclick="showAdminTab('activity')" class="admin-tab" id="tab-activity">Activity History</button>
+            </div>
+
+            <div id="admin-users-tab" class="admin-tab-content">
+                <div id="admin-users-list" class="job-list"></div>
+            </div>
+
+            <div id="admin-jobs-tab" class="admin-tab-content" style="display: none;">
+                <div class="admin-filter">
+                    <label>Filter by user: </label>
+                    <select id="admin-user-filter" onchange="filterAdminJobs()">
+                        <option value="">All users</option>
+                    </select>
+                </div>
+                <div id="admin-jobs-list" class="job-list"></div>
+            </div>
+
+            <div id="admin-activity-tab" class="admin-tab-content" style="display: none;">
+                <div id="admin-activity-list" class="activity-list"></div>
+            </div>
 
             <div style="margin-top: 24px;">
                 <button onclick="showStep('dashboard')" class="btn-secondary">Back to Dashboard</button>
@@ -307,8 +342,6 @@
                     <span id="selected-count">0 files selected</span>
                 </div>
                 <div class="modal-buttons">
-                    <button onclick="selectAllDropboxImages()" class="btn-secondary">Select All</button>
-                    <button onclick="deselectAllDropboxImages()" class="btn-secondary">Deselect All</button>
                     <button onclick="processSelectedDropboxFiles()" class="btn-primary">Process Selected</button>
                     <button onclick="closeDropboxBrowser()">Cancel</button>
                 </div>
