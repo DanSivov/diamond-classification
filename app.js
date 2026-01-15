@@ -327,6 +327,62 @@ const dropboxBrowserState = {
     allEntries: []
 };
 
+// Map to track Dropbox source paths for each image filename
+// Used to save graded images back to the correct folder
+const dropboxSourcePaths = new Map();
+
+/**
+ * Parse filename to create graded version
+ * Removes existing prefix (marked_, original_, processed_) and adds graded_
+ * @param {string} filename - Original filename (e.g., "marked_image123.png")
+ * @returns {string} - Parsed filename with graded_ prefix (e.g., "graded_image123.png")
+ */
+function parseFilenameForGraded(filename) {
+    // Remove extension first
+    const lastDot = filename.lastIndexOf('.');
+    const ext = lastDot > 0 ? filename.substring(lastDot) : '.png';
+    const baseName = lastDot > 0 ? filename.substring(0, lastDot) : filename;
+
+    // Known prefixes to remove
+    const prefixesToRemove = ['marked_', 'original_', 'processed_'];
+
+    let cleanedName = baseName;
+    for (const prefix of prefixesToRemove) {
+        if (cleanedName.toLowerCase().startsWith(prefix.toLowerCase())) {
+            cleanedName = cleanedName.substring(prefix.length);
+            break; // Only remove one prefix
+        }
+    }
+
+    // Add graded_ prefix and extension
+    return `graded_${cleanedName}${ext}`;
+}
+
+/**
+ * Calculate graded folder path from source path
+ * Replaces /original/, /marked/, or /processed/ with /graded/
+ * @param {string} sourcePath - Original Dropbox path (e.g., "/sorting-robot/marquise/original/marked_image123.png")
+ * @returns {string} - Graded folder path (e.g., "/sorting-robot/marquise/graded")
+ */
+function calculateGradedFolderPath(sourcePath) {
+    // Get directory path (remove filename)
+    const lastSlash = sourcePath.lastIndexOf('/');
+    const dirPath = lastSlash > 0 ? sourcePath.substring(0, lastSlash) : sourcePath;
+
+    // Replace source subfolder with graded
+    const subFolders = ['original', 'marked', 'processed'];
+
+    for (const subFolder of subFolders) {
+        // Check if path ends with the subfolder
+        if (dirPath.toLowerCase().endsWith(`/${subFolder}`)) {
+            return dirPath.substring(0, dirPath.length - subFolder.length) + 'graded';
+        }
+    }
+
+    // If no known subfolder found, just append /graded to the directory
+    return `${dirPath}/graded`;
+}
+
 async function processFromDropbox() {
     if (!dropboxClient) {
         const confirm = window.confirm('You need to connect to Dropbox first. Connect now?');
@@ -585,6 +641,11 @@ async function processSelectedDropboxFiles() {
             const file = filesToDownload[i];
             const progress = Math.round((i / filesToDownload.length) * 30); // 0-30% for download
             showProcessingStatus(`Downloading ${file.name}... (${i + 1}/${filesToDownload.length})`, progress);
+
+            // Store source path for this file (used when saving graded image back)
+            // file.path looks like: /sorting-robot/marquise/original/original_image123.png
+            dropboxSourcePaths.set(file.name, file.path);
+            console.log(`Stored source path for ${file.name}: ${file.path}`);
 
             const downloadResponse = await dropboxClient.filesDownload({
                 path: file.path
@@ -2213,6 +2274,125 @@ function base64URLEncode(buffer) {
 }
 
 /**
+ * Check if a file exists in Dropbox
+ * @param {string} path - Full Dropbox path to check
+ * @returns {boolean} - True if file exists
+ */
+async function checkDropboxFileExists(path) {
+    try {
+        await dropboxClient.filesGetMetadata({ path });
+        return true;
+    } catch (error) {
+        if (error.status === 409) {
+            // File not found - this is expected
+            return false;
+        }
+        console.error('Error checking file existence:', error);
+        return false;
+    }
+}
+
+/**
+ * Generate unique filename with duplicate suffix if needed
+ * @param {string} folderPath - Dropbox folder path
+ * @param {string} filename - Desired filename
+ * @returns {string} - Unique filename with _duplicate1, _duplicate2, etc. if needed
+ */
+async function generateUniqueFilename(folderPath, filename) {
+    const fullPath = `${folderPath}/${filename}`;
+    const exists = await checkDropboxFileExists(fullPath);
+
+    if (!exists) {
+        return filename;
+    }
+
+    // File exists, need to add duplicate suffix
+    const lastDot = filename.lastIndexOf('.');
+    const ext = lastDot > 0 ? filename.substring(lastDot) : '.png';
+    const baseName = lastDot > 0 ? filename.substring(0, lastDot) : filename;
+
+    let duplicateNum = 1;
+    let newFilename;
+    do {
+        newFilename = `${baseName}_duplicate${duplicateNum}${ext}`;
+        const newPath = `${folderPath}/${newFilename}`;
+        const newExists = await checkDropboxFileExists(newPath);
+        if (!newExists) {
+            break;
+        }
+        duplicateNum++;
+    } while (duplicateNum < 100); // Safety limit
+
+    return newFilename;
+}
+
+/**
+ * Show duplicate confirmation modal and wait for user response
+ * @param {string} filename - The filename that already exists
+ * @param {string} folderPath - The folder path
+ * @returns {Promise<string>} - 'overwrite', 'rename', or 'cancel'
+ */
+function showDuplicateConfirmModal(filename, folderPath) {
+    return new Promise((resolve) => {
+        const modal = document.createElement('div');
+        modal.className = 'modal active';
+        modal.id = 'duplicate-confirm-modal';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 500px;">
+                <h3>File Already Exists</h3>
+                <p>A file named <strong>${filename}</strong> already exists in:</p>
+                <p style="word-break: break-all; color: #666; font-size: 0.9em;">${folderPath}</p>
+                <p>What would you like to do?</p>
+                <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
+                    <button class="btn btn-primary" id="duplicate-overwrite">Overwrite</button>
+                    <button class="btn btn-secondary" id="duplicate-rename">Save as Copy</button>
+                    <button class="btn" id="duplicate-cancel">Cancel</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+
+        document.getElementById('duplicate-overwrite').onclick = () => {
+            document.body.removeChild(modal);
+            resolve('overwrite');
+        };
+        document.getElementById('duplicate-rename').onclick = () => {
+            document.body.removeChild(modal);
+            resolve('rename');
+        };
+        document.getElementById('duplicate-cancel').onclick = () => {
+            document.body.removeChild(modal);
+            resolve('cancel');
+        };
+    });
+}
+
+/**
+ * Ensure graded folder exists in Dropbox
+ * @param {string} folderPath - Full path to the graded folder
+ */
+async function ensureGradedFolderExists(folderPath) {
+    try {
+        await dropboxClient.filesGetMetadata({ path: folderPath });
+        console.log(`Graded folder already exists: ${folderPath}`);
+    } catch (error) {
+        if (error.status === 409) {
+            // Folder doesn't exist, create it
+            console.log(`Creating graded folder: ${folderPath}`);
+            try {
+                await dropboxClient.filesCreateFolderV2({ path: folderPath });
+                console.log(`Created graded folder: ${folderPath}`);
+            } catch (createError) {
+                // Might fail if parent doesn't exist or already created by another request
+                console.warn('Could not create folder, it may already exist:', createError);
+            }
+        } else {
+            console.error('Error checking graded folder:', error);
+        }
+    }
+}
+
+/**
  * Regenerate graded image with human corrections and save to Dropbox
  * Called when an image is fully verified (all ROIs have been reviewed)
  */
@@ -2245,7 +2425,6 @@ async function regenerateAndSaveToDropbox(imageId) {
         // Check if Dropbox is connected
         if (!dropboxClient) {
             console.log('Dropbox not connected, skipping upload');
-            // Store the regenerated image for later manual save if needed
             return;
         }
 
@@ -2258,29 +2437,104 @@ async function regenerateAndSaveToDropbox(imageId) {
         }
         const blob = new Blob([bytes], { type: 'image/png' });
 
-        // Generate filename with timestamp
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const originalName = imageInfo.filename.replace(/\.[^/.]+$/, ''); // Remove extension
-        const filename = `${originalName}_graded_${timestamp}.png`;
+        // Get the source path for this image
+        const sourcePath = dropboxSourcePaths.get(imageInfo.filename);
+        console.log(`Source path for ${imageInfo.filename}: ${sourcePath}`);
 
-        // Upload to Dropbox in the graded subfolder
-        const dropboxPath = `${DROPBOX_CONFIG.folderPath}/graded/${filename}`;
+        let gradedFolderPath;
+        let gradedFilename;
 
-        console.log(`Uploading to Dropbox: ${dropboxPath}`);
+        if (sourcePath) {
+            // Calculate graded folder path from source path
+            gradedFolderPath = calculateGradedFolderPath(sourcePath);
+            gradedFilename = parseFilenameForGraded(imageInfo.filename);
+        } else {
+            // Fallback: save to default graded folder with timestamp
+            console.warn('No source path found, using fallback location');
+            gradedFolderPath = `${DROPBOX_CONFIG.folderPath}/graded`;
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            const originalName = imageInfo.filename.replace(/\.[^/.]+$/, '');
+            gradedFilename = `graded_${originalName}_${timestamp}.png`;
+        }
+
+        console.log(`Target folder: ${gradedFolderPath}`);
+        console.log(`Target filename: ${gradedFilename}`);
+
+        // Ensure graded folder exists
+        await ensureGradedFolderExists(gradedFolderPath);
+
+        // Check if file already exists
+        const fullPath = `${gradedFolderPath}/${gradedFilename}`;
+        const exists = await checkDropboxFileExists(fullPath);
+
+        let finalFilename = gradedFilename;
+        let uploadMode = 'add';
+
+        if (exists) {
+            // Ask user what to do
+            const userChoice = await showDuplicateConfirmModal(gradedFilename, gradedFolderPath);
+
+            if (userChoice === 'cancel') {
+                console.log('User cancelled upload');
+                return;
+            } else if (userChoice === 'overwrite') {
+                uploadMode = 'overwrite';
+                console.log('User chose to overwrite');
+            } else if (userChoice === 'rename') {
+                finalFilename = await generateUniqueFilename(gradedFolderPath, gradedFilename);
+                console.log(`User chose to save as: ${finalFilename}`);
+            }
+        }
+
+        // Upload to Dropbox
+        const dropboxPath = `${gradedFolderPath}/${finalFilename}`;
+        console.log(`Uploading to Dropbox: ${dropboxPath} (mode: ${uploadMode})`);
 
         await dropboxClient.filesUpload({
             path: dropboxPath,
             contents: blob,
-            mode: 'add',
-            autorename: true
+            mode: uploadMode === 'overwrite' ? { '.tag': 'overwrite' } : 'add',
+            autorename: false
         });
 
-        console.log(`Successfully saved corrected graded image to Dropbox: ${filename}`);
+        console.log(`Successfully saved corrected graded image to Dropbox: ${finalFilename}`);
+
+        // Show success notification
+        showNotification(`Saved to Dropbox: ${finalFilename}`, 'success');
 
     } catch (error) {
         console.error('Error in regenerateAndSaveToDropbox:', error);
-        // Don't throw - we don't want to interrupt the verification flow
+        showNotification('Failed to save to Dropbox', 'error');
     }
+}
+
+/**
+ * Show a notification message
+ */
+function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 15px 25px;
+        border-radius: 8px;
+        background: ${type === 'success' ? '#4CAF50' : type === 'error' ? '#f44336' : '#2196F3'};
+        color: white;
+        font-weight: 500;
+        z-index: 10000;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        animation: slideIn 0.3s ease;
+    `;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+
+    // Remove after 3 seconds
+    setTimeout(() => {
+        notification.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => document.body.removeChild(notification), 300);
+    }, 3000);
 }
 
 async function saveToDropbox() {
