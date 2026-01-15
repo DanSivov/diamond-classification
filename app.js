@@ -652,6 +652,12 @@ function displayStorageSummary(data, debugData = null) {
                             ${Object.entries(allR2Vars).map(([k, v]) => `<li>${k}: ${v}</li>`).join('')}
                         </ul>
                     ` : '<p style="margin: 4px 0; color: #fca5a5;">No R2* environment variables found at all!</p>'}
+                    ${debugData.all_env_var_names ? `
+                        <details style="margin-top: 8px;">
+                            <summary style="cursor: pointer; color: #f87171;">All ${debugData.all_env_var_names.length} env var names</summary>
+                            <pre style="margin: 8px 0; padding: 8px; background: #450a0a; border-radius: 4px; color: #fca5a5; font-size: 10px; max-height: 200px; overflow-y: auto;">${debugData.all_env_var_names.join('\\n')}</pre>
+                        </details>
+                    ` : ''}
                 </div>
             `;
         } else {
