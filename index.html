@@ -83,6 +83,7 @@
                 <button onclick="showAdminTab('users')" class="admin-tab active" id="tab-users">Users</button>
                 <button onclick="showAdminTab('jobs')" class="admin-tab" id="tab-jobs">All Jobs</button>
                 <button onclick="showAdminTab('activity')" class="admin-tab" id="tab-activity">Activity History</button>
+                <button onclick="showAdminTab('storage')" class="admin-tab" id="tab-storage">Storage</button>
             </div>
 
             <div id="admin-users-tab" class="admin-tab-content">
@@ -101,6 +102,21 @@
 
             <div id="admin-activity-tab" class="admin-tab-content" style="display: none;">
                 <div id="admin-activity-list" class="activity-list"></div>
+            </div>
+
+            <div id="admin-storage-tab" class="admin-tab-content" style="display: none;">
+                <div class="storage-summary" id="storage-summary">
+                    <div class="storage-loading">Loading storage information...</div>
+                </div>
+                <div class="storage-actions">
+                    <button onclick="cleanOrphanedStorage()" class="btn-warning" id="btn-clean-orphaned" disabled>
+                        Clean Orphaned Files
+                    </button>
+                    <button onclick="clearAllStorage()" class="btn-danger" id="btn-clear-all">
+                        Clear ALL Storage
+                    </button>
+                </div>
+                <div id="admin-storage-list" class="storage-list"></div>
             </div>
 
             <div style="margin-top: 24px;">

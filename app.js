@@ -328,6 +328,8 @@ function showAdminTab(tabName) {
         loadAdminJobs();
     } else if (tabName === 'activity') {
         loadAdminActivity();
+    } else if (tabName === 'storage') {
+        loadAdminStorage();
     }
 }
 
@@ -583,6 +585,194 @@ function displayAdminActivity(activity) {
         }
         return '';
     }).join('');
+}
+
+// ============================================================================
+// Admin Storage Management Functions
+// ============================================================================
+
+async function loadAdminStorage() {
+    try {
+        document.getElementById('storage-summary').innerHTML = '<div class="storage-loading">Loading storage information...</div>';
+        document.getElementById('admin-storage-list').innerHTML = '';
+        document.getElementById('btn-clean-orphaned').disabled = true;
+
+        const response = await fetch(`${state.apiUrl}/admin/storage?requester_email=${encodeURIComponent(state.userEmail)}`);
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch storage info');
+        }
+
+        const data = await response.json();
+        displayStorageSummary(data);
+        displayStorageList(data.jobs);
+
+        // Enable clean orphaned button if there are orphaned files
+        document.getElementById('btn-clean-orphaned').disabled = data.orphaned_files === 0;
+
+    } catch (error) {
+        console.error('Error loading admin storage:', error);
+        document.getElementById('storage-summary').innerHTML = `
+            <div class="storage-error">
+                <p>Error: ${error.message}</p>
+            </div>
+        `;
+    }
+}
+
+function displayStorageSummary(data) {
+    const container = document.getElementById('storage-summary');
+
+    container.innerHTML = `
+        <div class="storage-stats">
+            <div class="storage-stat">
+                <div class="storage-stat-value">${data.total_files}</div>
+                <div class="storage-stat-label">Total Files</div>
+            </div>
+            <div class="storage-stat">
+                <div class="storage-stat-value">${data.total_jobs_in_storage}</div>
+                <div class="storage-stat-label">Jobs in Storage</div>
+            </div>
+            <div class="storage-stat ${data.orphaned_files > 0 ? 'warning' : ''}">
+                <div class="storage-stat-value">${data.orphaned_files}</div>
+                <div class="storage-stat-label">Orphaned Files</div>
+            </div>
+            <div class="storage-stat ${data.orphaned_jobs > 0 ? 'warning' : ''}">
+                <div class="storage-stat-value">${data.orphaned_jobs}</div>
+                <div class="storage-stat-label">Orphaned Jobs</div>
+            </div>
+        </div>
+    `;
+}
+
+function displayStorageList(jobs) {
+    const container = document.getElementById('admin-storage-list');
+
+    if (!jobs || jobs.length === 0) {
+        container.innerHTML = `
+            <div class="browser-empty">
+                <p>No files in storage</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = jobs.map(job => {
+        const statusClass = job.is_orphaned ? 'orphaned' : 'active';
+        const statusLabel = job.is_orphaned ? 'ORPHANED' : 'Active';
+
+        return `
+            <div class="storage-item ${statusClass}">
+                <div class="storage-item-header">
+                    <div class="storage-item-title">
+                        Job #${job.job_id.substring(0, 8)}
+                        <span class="storage-status-badge ${statusClass}">${statusLabel}</span>
+                    </div>
+                    <div class="storage-item-count">${job.file_count} files</div>
+                </div>
+                <div class="storage-item-actions">
+                    <button onclick="deleteJobStorage('${job.job_id}')" class="btn-small btn-danger">
+                        Delete Files
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function deleteJobStorage(jobId) {
+    if (!confirm(`Delete all storage files for job ${jobId.substring(0, 8)}?`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${state.apiUrl}/admin/storage/job/${jobId}?requester_email=${encodeURIComponent(state.userEmail)}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.error || 'Failed to delete job storage');
+        }
+
+        const result = await response.json();
+        alert(`Deleted ${result.deleted_count} files for job ${jobId.substring(0, 8)}`);
+
+        // Refresh storage list
+        await loadAdminStorage();
+
+    } catch (error) {
+        console.error('Error deleting job storage:', error);
+        alert('Failed to delete job storage: ' + error.message);
+    }
+}
+
+async function cleanOrphanedStorage() {
+    if (!confirm('Delete all orphaned files? These are files for jobs that no longer exist in the database.')) {
+        return;
+    }
+
+    try {
+        document.getElementById('btn-clean-orphaned').disabled = true;
+        document.getElementById('btn-clean-orphaned').textContent = 'Cleaning...';
+
+        const response = await fetch(`${state.apiUrl}/admin/storage/orphaned?requester_email=${encodeURIComponent(state.userEmail)}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.error || 'Failed to clean orphaned storage');
+        }
+
+        const result = await response.json();
+        alert(`Cleaned up ${result.deleted_count} orphaned files!`);
+
+        // Refresh storage list
+        await loadAdminStorage();
+
+    } catch (error) {
+        console.error('Error cleaning orphaned storage:', error);
+        alert('Failed to clean orphaned storage: ' + error.message);
+    } finally {
+        document.getElementById('btn-clean-orphaned').textContent = 'Clean Orphaned Files';
+    }
+}
+
+async function clearAllStorage() {
+    const confirmation = prompt('This will DELETE ALL storage files! Type "DELETE ALL" to confirm:');
+
+    if (confirmation !== 'DELETE ALL') {
+        alert('Cancelled. You must type "DELETE ALL" exactly to confirm.');
+        return;
+    }
+
+    try {
+        document.getElementById('btn-clear-all').disabled = true;
+        document.getElementById('btn-clear-all').textContent = 'Clearing...';
+
+        const response = await fetch(`${state.apiUrl}/admin/storage/all?requester_email=${encodeURIComponent(state.userEmail)}&confirm=DELETE_ALL`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.error || 'Failed to clear all storage');
+        }
+
+        const result = await response.json();
+        alert(`Cleared ALL storage! Deleted ${result.deleted_count} files.`);
+
+        // Refresh storage list
+        await loadAdminStorage();
+
+    } catch (error) {
+        console.error('Error clearing all storage:', error);
+        alert('Failed to clear all storage: ' + error.message);
+    } finally {
+        document.getElementById('btn-clear-all').disabled = false;
+        document.getElementById('btn-clear-all').textContent = 'Clear ALL Storage';
+    }
 }
 
 function selectFromDropbox() {
