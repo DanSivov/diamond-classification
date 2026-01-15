@@ -637,14 +637,21 @@ function displayStorageSummary(data, debugData = null) {
         // Check if R2 is not configured
         if (debugData.r2_not_configured) {
             const envVars = debugData.env_vars_set || {};
+            const allR2Vars = debugData.all_r2_env_vars || {};
             debugHtml = `
                 <div class="storage-debug" style="margin-top: 16px; padding: 12px; background: #7f1d1d; border-radius: 8px; font-size: 12px;">
                     <h4 style="margin: 0 0 8px 0; color: #fca5a5;">R2 Not Configured</h4>
                     <p style="margin: 4px 0; color: #fca5a5;">${debugData.message || 'Missing R2 configuration'}</p>
-                    <p style="margin: 8px 0 4px 0; color: #f87171;">Environment Variables:</p>
-                    <ul style="margin: 4px 0; padding-left: 20px; color: #fca5a5;">
-                        ${Object.entries(envVars).map(([k, v]) => `<li>${k}: ${v ? '✓ Set' : '✗ Missing'}</li>`).join('')}
+                    <p style="margin: 8px 0 4px 0; color: #f87171;">Expected Variables (raw values):</p>
+                    <ul style="margin: 4px 0; padding-left: 20px; color: #fca5a5; font-family: monospace;">
+                        ${Object.entries(envVars).map(([k, v]) => `<li>${k}: ${v}</li>`).join('')}
                     </ul>
+                    ${Object.keys(allR2Vars).length > 0 ? `
+                        <p style="margin: 8px 0 4px 0; color: #f87171;">All R2* env vars found:</p>
+                        <ul style="margin: 4px 0; padding-left: 20px; color: #fca5a5; font-family: monospace;">
+                            ${Object.entries(allR2Vars).map(([k, v]) => `<li>${k}: ${v}</li>`).join('')}
+                        </ul>
+                    ` : '<p style="margin: 4px 0; color: #fca5a5;">No R2* environment variables found at all!</p>'}
                 </div>
             `;
         } else {
