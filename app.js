@@ -12,6 +12,7 @@ const state = {
     currentJobImages: null,  // Images from current job
     currentImage: null,  // Current image being verified
     currentROIs: null,  // ROIs from current image
+    previousImageId: null,  // Track previous image to detect when image changes
     userEmail: localStorage.getItem('userEmail') || null,  // User email for verification
     apiUrl: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
         ? 'http://localhost:5000'
@@ -562,22 +563,6 @@ function toggleAllDropboxFiles() {
     updateSelectedFiles();
 }
 
-function selectAllDropboxImages() {
-    const checkboxes = document.querySelectorAll('.file-checkbox');
-    checkboxes.forEach(checkbox => {
-        checkbox.checked = true;
-    });
-    updateSelectedFiles();
-}
-
-function deselectAllDropboxImages() {
-    const checkboxes = document.querySelectorAll('.file-checkbox');
-    checkboxes.forEach(checkbox => {
-        checkbox.checked = false;
-    });
-    updateSelectedFiles();
-}
-
 async function processSelectedDropboxFiles() {
     if (dropboxBrowserState.selectedFiles.length === 0) {
         alert('Please select at least one image file');
@@ -1102,6 +1087,7 @@ async function startJobVerification() {
         state.currentROIImageMap = imageMap;  // Store image map for later use
         state.currentROIIndex = startIndex;
         state.currentImage = imageMap[allROIs[startIndex].id];
+        state.previousImageId = state.currentImage ? state.currentImage.id : null;  // Initialize tracking
 
         // Start verification UI
         startROIVerification();
@@ -1162,7 +1148,10 @@ async function updateROIVerificationDisplay() {
     const index = state.currentROIIndex;
 
     if (index >= rois.length) {
-        // All ROIs verified - complete the verification
+        // All ROIs verified - save last image and complete
+        if (state.previousImageId) {
+            await regenerateAndSaveToDropbox(state.previousImageId);
+        }
         alert(`Verification complete! ${rois.length} ROIs verified.`);
         showStep('dashboard');
         return;
@@ -1172,7 +1161,18 @@ async function updateROIVerificationDisplay() {
 
     // Update current image for this ROI
     if (state.currentROIImageMap) {
-        state.currentImage = state.currentROIImageMap[roi.id];
+        const newImage = state.currentROIImageMap[roi.id];
+
+        // Check if we've moved to a new image (previous image is now fully verified)
+        if (state.previousImageId && newImage && newImage.id !== state.previousImageId) {
+            console.log(`Image ${state.previousImageId} fully verified, regenerating and saving...`);
+            // Don't await - let it run in background while user continues
+            regenerateAndSaveToDropbox(state.previousImageId);
+        }
+
+        // Update tracking
+        state.previousImageId = newImage ? newImage.id : null;
+        state.currentImage = newImage;
     }
 
     // Update progress - use actual ROI index and total count
@@ -2210,6 +2210,77 @@ function base64URLEncode(buffer) {
         .replace(/\+/g, '-')
         .replace(/\//g, '_')
         .replace(/=/g, '');
+}
+
+/**
+ * Regenerate graded image with human corrections and save to Dropbox
+ * Called when an image is fully verified (all ROIs have been reviewed)
+ */
+async function regenerateAndSaveToDropbox(imageId) {
+    try {
+        console.log(`Regenerating graded image for image ${imageId}...`);
+
+        // Find the image info
+        const imageInfo = state.currentJobImages?.find(img => img.id === imageId);
+        if (!imageInfo) {
+            console.error(`Image ${imageId} not found in job images`);
+            return;
+        }
+
+        // Call API to regenerate graded image with human corrections
+        const response = await fetch(`${state.apiUrl}/images/${imageId}/regenerate-graded`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            console.error('Failed to regenerate graded image:', error);
+            return;
+        }
+
+        const result = await response.json();
+        console.log(`Regenerated image with ${result.roi_count} ROIs`);
+
+        // Check if Dropbox is connected
+        if (!dropboxClient) {
+            console.log('Dropbox not connected, skipping upload');
+            // Store the regenerated image for later manual save if needed
+            return;
+        }
+
+        // Convert base64 to blob
+        const base64Data = result.corrected_graded_base64;
+        const binaryString = atob(base64Data);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        const blob = new Blob([bytes], { type: 'image/png' });
+
+        // Generate filename with timestamp
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const originalName = imageInfo.filename.replace(/\.[^/.]+$/, ''); // Remove extension
+        const filename = `${originalName}_graded_${timestamp}.png`;
+
+        // Upload to Dropbox in the graded subfolder
+        const dropboxPath = `${DROPBOX_CONFIG.folderPath}/graded/${filename}`;
+
+        console.log(`Uploading to Dropbox: ${dropboxPath}`);
+
+        await dropboxClient.filesUpload({
+            path: dropboxPath,
+            contents: blob,
+            mode: 'add',
+            autorename: true
+        });
+
+        console.log(`Successfully saved corrected graded image to Dropbox: ${filename}`);
+
+    } catch (error) {
+        console.error('Error in regenerateAndSaveToDropbox:', error);
+        // Don't throw - we don't want to interrupt the verification flow
+    }
 }
 
 async function saveToDropbox() {
