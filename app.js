@@ -808,10 +808,14 @@ async function cleanOrphanedStorage() {
 }
 
 async function clearAllStorage() {
-    const confirmation = prompt('This will DELETE ALL storage files! Type "DELETE ALL" to confirm:');
+    // Ask if they also want to clear the database
+    const clearDb = confirm('Also clear ALL jobs from the database?\n\nClick OK to delete storage + database\nClick Cancel to delete storage only');
 
-    if (confirmation !== 'DELETE ALL') {
-        alert('Cancelled. You must type "DELETE ALL" exactly to confirm.');
+    const confirmText = clearDb ? 'DELETE ALL AND DATABASE' : 'DELETE ALL';
+    const confirmation = prompt(`This will DELETE ALL storage files${clearDb ? ' AND all database records' : ''}!\n\nType "${confirmText}" to confirm:`);
+
+    if (confirmation !== confirmText) {
+        alert(`Cancelled. You must type "${confirmText}" exactly to confirm.`);
         return;
     }
 
@@ -819,7 +823,8 @@ async function clearAllStorage() {
         document.getElementById('btn-clear-all').disabled = true;
         document.getElementById('btn-clear-all').textContent = 'Clearing...';
 
-        const response = await fetch(`${state.apiUrl}/admin/storage/all?requester_email=${encodeURIComponent(state.userEmail)}&confirm=DELETE_ALL`, {
+        const url = `${state.apiUrl}/admin/storage/all?requester_email=${encodeURIComponent(state.userEmail)}&confirm=DELETE_ALL&clear_database=${clearDb}`;
+        const response = await fetch(url, {
             method: 'DELETE'
         });
 
@@ -829,10 +834,17 @@ async function clearAllStorage() {
         }
 
         const result = await response.json();
-        alert(`Cleared ALL storage! Deleted ${result.deleted_count} files.`);
+        let message = `Cleared ALL storage! Deleted ${result.deleted_count} files.`;
+        if (result.database_cleared) {
+            message += `\n\nDatabase cleared:\n- ${result.db_deleted.jobs} jobs\n- ${result.db_deleted.images} images\n- ${result.db_deleted.rois} ROIs\n- ${result.db_deleted.verifications} verifications`;
+        }
+        alert(message);
 
-        // Refresh storage list
+        // Refresh storage list and jobs list
         await loadAdminStorage();
+        if (typeof loadAdminJobs === 'function') {
+            await loadAdminJobs();
+        }
 
     } catch (error) {
         console.error('Error clearing all storage:', error);
