@@ -72,6 +72,11 @@ function handleLogout() {
     state.currentJobImages = null;
     localStorage.removeItem('userEmail');
 
+    // Clear Dropbox credentials (so each user can connect their own Dropbox)
+    localStorage.removeItem('dropboxAccessToken');
+    dropboxClient = null;
+    updateDropboxStatus('Not connected', false);
+
     // Hide user bar and header
     document.getElementById('user-bar').style.display = 'none';
     document.getElementById('main-header').style.display = 'none';
@@ -524,6 +529,37 @@ function updateSelectedFiles() {
 
     const count = dropboxBrowserState.selectedFiles.length;
     document.getElementById('selected-count').textContent = `${count} file${count !== 1 ? 's' : ''} selected`;
+
+    // Update master checkbox state based on file selection
+    const masterCheckbox = document.getElementById('master-checkbox');
+    if (masterCheckbox) {
+        const allCheckboxes = document.querySelectorAll('.file-checkbox');
+        const totalFiles = allCheckboxes.length;
+        const selectedFiles = count;
+
+        if (selectedFiles === 0) {
+            masterCheckbox.checked = false;
+            masterCheckbox.indeterminate = false;
+        } else if (selectedFiles === totalFiles) {
+            masterCheckbox.checked = true;
+            masterCheckbox.indeterminate = false;
+        } else {
+            masterCheckbox.checked = false;
+            masterCheckbox.indeterminate = true;
+        }
+    }
+}
+
+function toggleAllDropboxFiles() {
+    const masterCheckbox = document.getElementById('master-checkbox');
+    const checkboxes = document.querySelectorAll('.file-checkbox');
+    const shouldCheck = masterCheckbox.checked;
+
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = shouldCheck;
+    });
+
+    updateSelectedFiles();
 }
 
 function selectAllDropboxImages() {
@@ -1151,10 +1187,10 @@ async function updateROIVerificationDisplay() {
     document.getElementById('roi-orientation').textContent = roi.predicted_orientation.toUpperCase();
     document.getElementById('roi-confidence').textContent = `${(roi.confidence * 100).toFixed(1)}%`;
 
-    // Update orientation color
+    // Update orientation color (green=table, red=tilted)
     const orientationSpan = document.getElementById('roi-orientation');
     orientationSpan.style.color = roi.predicted_orientation === 'table' ?
-        'var(--success)' : 'var(--warning)';
+        '#00C853' : '#FF3B30';
 
     // Update ROI canvas border color based on orientation
     const roiCanvas = document.getElementById('roi-canvas');
@@ -1296,6 +1332,8 @@ function handleROIVerificationKeyboard(e) {
         verifyROICorrect();
     } else if (e.key === 'n' || e.key === 'N') {
         verifyROIWrong();
+    } else if (e.key === 'f' || e.key === 'F') {
+        verifySAMFailure();  // Same function as button - handles both modes
     } else if (e.key === 's' || e.key === 'S') {
         verifyROISkip();
     } else if (e.key === 'q' || e.key === 'Q') {
