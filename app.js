@@ -634,32 +634,47 @@ function displayStorageSummary(data, debugData = null) {
 
     let debugHtml = '';
     if (debugData) {
-        const emptyPrefix = debugData.empty_prefix || {};
-        debugHtml = `
-            <div class="storage-debug" style="margin-top: 16px; padding: 12px; background: #1f2937; border-radius: 8px; font-size: 12px;">
-                <h4 style="margin: 0 0 8px 0; color: #60a5fa;">R2 Debug Info</h4>
-                <p style="margin: 4px 0; color: #9ca3af;">Bucket: ${debugData.bucket_name || 'N/A'}</p>
-                <p style="margin: 4px 0; color: #9ca3af;">Files found (empty prefix): ${emptyPrefix.key_count || 0}</p>
-                <p style="margin: 4px 0; color: #9ca3af;">Has Contents: ${emptyPrefix.has_contents ? 'Yes' : 'No'}</p>
-                ${emptyPrefix.error ? `<p style="margin: 4px 0; color: #ef4444;">Error: ${emptyPrefix.error}</p>` : ''}
-                ${emptyPrefix.contents && emptyPrefix.contents.length > 0 ? `
-                    <details style="margin-top: 8px;">
-                        <summary style="cursor: pointer; color: #60a5fa;">First ${emptyPrefix.contents.length} files</summary>
-                        <ul style="margin: 8px 0; padding-left: 20px; color: #9ca3af; max-height: 150px; overflow-y: auto;">
-                            ${emptyPrefix.contents.map(f => `<li style="word-break: break-all;">${f}</li>`).join('')}
-                        </ul>
-                    </details>
-                ` : ''}
-                ${debugData.prefixes_tried && debugData.prefixes_tried.length > 0 ? `
-                    <details style="margin-top: 8px;">
-                        <summary style="cursor: pointer; color: #60a5fa;">Prefix test results</summary>
-                        <ul style="margin: 8px 0; padding-left: 20px; color: #9ca3af;">
-                            ${debugData.prefixes_tried.map(p => `<li>"${p.prefix}": ${p.key_count || 0} files ${p.error ? `(Error: ${p.error})` : ''}</li>`).join('')}
-                        </ul>
-                    </details>
-                ` : ''}
-            </div>
-        `;
+        // Check if R2 is not configured
+        if (debugData.r2_not_configured) {
+            const envVars = debugData.env_vars_set || {};
+            debugHtml = `
+                <div class="storage-debug" style="margin-top: 16px; padding: 12px; background: #7f1d1d; border-radius: 8px; font-size: 12px;">
+                    <h4 style="margin: 0 0 8px 0; color: #fca5a5;">R2 Not Configured</h4>
+                    <p style="margin: 4px 0; color: #fca5a5;">${debugData.message || 'Missing R2 configuration'}</p>
+                    <p style="margin: 8px 0 4px 0; color: #f87171;">Environment Variables:</p>
+                    <ul style="margin: 4px 0; padding-left: 20px; color: #fca5a5;">
+                        ${Object.entries(envVars).map(([k, v]) => `<li>${k}: ${v ? '✓ Set' : '✗ Missing'}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+        } else {
+            const emptyPrefix = debugData.empty_prefix || {};
+            debugHtml = `
+                <div class="storage-debug" style="margin-top: 16px; padding: 12px; background: #1f2937; border-radius: 8px; font-size: 12px;">
+                    <h4 style="margin: 0 0 8px 0; color: #60a5fa;">R2 Debug Info</h4>
+                    <p style="margin: 4px 0; color: #9ca3af;">Bucket: ${debugData.bucket_name || 'N/A'}</p>
+                    <p style="margin: 4px 0; color: #9ca3af;">Files found (empty prefix): ${emptyPrefix.key_count || 0}</p>
+                    <p style="margin: 4px 0; color: #9ca3af;">Has Contents: ${emptyPrefix.has_contents ? 'Yes' : 'No'}</p>
+                    ${emptyPrefix.error ? `<p style="margin: 4px 0; color: #ef4444;">Error: ${emptyPrefix.error}</p>` : ''}
+                    ${emptyPrefix.contents && emptyPrefix.contents.length > 0 ? `
+                        <details style="margin-top: 8px;">
+                            <summary style="cursor: pointer; color: #60a5fa;">First ${emptyPrefix.contents.length} files</summary>
+                            <ul style="margin: 8px 0; padding-left: 20px; color: #9ca3af; max-height: 150px; overflow-y: auto;">
+                                ${emptyPrefix.contents.map(f => `<li style="word-break: break-all;">${f}</li>`).join('')}
+                            </ul>
+                        </details>
+                    ` : ''}
+                    ${debugData.prefixes_tried && debugData.prefixes_tried.length > 0 ? `
+                        <details style="margin-top: 8px;">
+                            <summary style="cursor: pointer; color: #60a5fa;">Prefix test results</summary>
+                            <ul style="margin: 8px 0; padding-left: 20px; color: #9ca3af;">
+                                ${debugData.prefixes_tried.map(p => `<li>"${p.prefix}": ${p.key_count || 0} files ${p.error ? `(Error: ${p.error})` : ''}</li>`).join('')}
+                            </ul>
+                        </details>
+                    ` : ''}
+                </div>
+            `;
+        }
     }
 
     container.innerHTML = `
