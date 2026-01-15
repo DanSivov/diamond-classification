@@ -980,7 +980,18 @@ async function openDropboxBrowser() {
 
     // Initialize Dropbox if needed
     if (!dropboxClient) {
-        await initializeDropbox();
+        const initialized = initializeDropbox();
+        if (!initialized) {
+            // No stored token - need to authenticate
+            const content = document.getElementById('file-browser-content');
+            content.innerHTML = `
+                <div class="browser-error">
+                    <p>Please connect to Dropbox first.</p>
+                    <button onclick="closeDropboxBrowser(); authenticateDropbox();" class="btn-primary">Connect to Dropbox</button>
+                </div>
+            `;
+            return;
+        }
     }
 
     // Load the default folder
