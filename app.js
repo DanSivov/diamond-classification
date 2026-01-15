@@ -597,14 +597,23 @@ async function loadAdminStorage() {
         document.getElementById('admin-storage-list').innerHTML = '';
         document.getElementById('btn-clean-orphaned').disabled = true;
 
-        const response = await fetch(`${state.apiUrl}/admin/storage?requester_email=${encodeURIComponent(state.userEmail)}`);
+        // Also fetch debug info to help diagnose issues
+        const [response, debugResponse] = await Promise.all([
+            fetch(`${state.apiUrl}/admin/storage?requester_email=${encodeURIComponent(state.userEmail)}`),
+            fetch(`${state.apiUrl}/admin/storage/debug?requester_email=${encodeURIComponent(state.userEmail)}`)
+        ]);
 
         if (!response.ok) {
             throw new Error('Failed to fetch storage info');
         }
 
         const data = await response.json();
-        displayStorageSummary(data);
+        let debugData = null;
+        if (debugResponse.ok) {
+            debugData = await debugResponse.json();
+        }
+
+        displayStorageSummary(data, debugData);
         displayStorageList(data.jobs);
 
         // Enable clean orphaned button if there are orphaned files
@@ -620,8 +629,38 @@ async function loadAdminStorage() {
     }
 }
 
-function displayStorageSummary(data) {
+function displayStorageSummary(data, debugData = null) {
     const container = document.getElementById('storage-summary');
+
+    let debugHtml = '';
+    if (debugData) {
+        const emptyPrefix = debugData.empty_prefix || {};
+        debugHtml = `
+            <div class="storage-debug" style="margin-top: 16px; padding: 12px; background: #1f2937; border-radius: 8px; font-size: 12px;">
+                <h4 style="margin: 0 0 8px 0; color: #60a5fa;">R2 Debug Info</h4>
+                <p style="margin: 4px 0; color: #9ca3af;">Bucket: ${debugData.bucket_name || 'N/A'}</p>
+                <p style="margin: 4px 0; color: #9ca3af;">Files found (empty prefix): ${emptyPrefix.key_count || 0}</p>
+                <p style="margin: 4px 0; color: #9ca3af;">Has Contents: ${emptyPrefix.has_contents ? 'Yes' : 'No'}</p>
+                ${emptyPrefix.error ? `<p style="margin: 4px 0; color: #ef4444;">Error: ${emptyPrefix.error}</p>` : ''}
+                ${emptyPrefix.contents && emptyPrefix.contents.length > 0 ? `
+                    <details style="margin-top: 8px;">
+                        <summary style="cursor: pointer; color: #60a5fa;">First ${emptyPrefix.contents.length} files</summary>
+                        <ul style="margin: 8px 0; padding-left: 20px; color: #9ca3af; max-height: 150px; overflow-y: auto;">
+                            ${emptyPrefix.contents.map(f => `<li style="word-break: break-all;">${f}</li>`).join('')}
+                        </ul>
+                    </details>
+                ` : ''}
+                ${debugData.prefixes_tried && debugData.prefixes_tried.length > 0 ? `
+                    <details style="margin-top: 8px;">
+                        <summary style="cursor: pointer; color: #60a5fa;">Prefix test results</summary>
+                        <ul style="margin: 8px 0; padding-left: 20px; color: #9ca3af;">
+                            ${debugData.prefixes_tried.map(p => `<li>"${p.prefix}": ${p.key_count || 0} files ${p.error ? `(Error: ${p.error})` : ''}</li>`).join('')}
+                        </ul>
+                    </details>
+                ` : ''}
+            </div>
+        `;
+    }
 
     container.innerHTML = `
         <div class="storage-stats">
@@ -642,6 +681,7 @@ function displayStorageSummary(data) {
                 <div class="storage-stat-label">Orphaned Jobs</div>
             </div>
         </div>
+        ${debugHtml}
     `;
 }
 
