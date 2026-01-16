@@ -91,11 +91,11 @@ async function handleLogin() {
 }
 
 async function handleAdminLogin() {
-    const email = document.getElementById('login-email').value.trim();
+    const email = document.getElementById('admin-email').value.trim();
     const password = document.getElementById('admin-password').value;
 
     if (!email || !email.includes('@')) {
-        alert('Please enter your email address first');
+        alert('Please enter your admin email');
         return;
     }
 
@@ -142,7 +142,8 @@ async function handleAdminLogin() {
             adminBtn.style.display = 'inline-block';
         }
 
-        // Clear password field
+        // Clear fields
+        document.getElementById('admin-email').value = '';
         document.getElementById('admin-password').value = '';
 
         // Go to dashboard

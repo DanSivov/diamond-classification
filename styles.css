@@ -572,6 +572,21 @@ canvas {
     width: 100%;
 }
 
+.admin-link {
+    display: block;
+    margin-top: 20px;
+    font-size: 13px;
+    color: var(--text-tertiary);
+    text-align: center;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.admin-link:hover {
+    color: var(--text-secondary);
+    text-decoration: underline;
+}
+
 /* Job List */
 .job-list {
     max-width: 800px;

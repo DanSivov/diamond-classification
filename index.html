@@ -19,12 +19,21 @@
                 <input type="email" id="login-email" placeholder="your.email@example.com" autocomplete="email">
                 <button onclick="handleLogin()" class="btn-primary">Continue</button>
 
-                <!-- Admin Login -->
-                <div id="admin-login-section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #333;">
-                    <p style="font-size: 0.85em; color: #888; margin-bottom: 10px;">Admin Login</p>
-                    <input type="password" id="admin-password" placeholder="Admin password" style="margin-bottom: 10px;">
-                    <button onclick="handleAdminLogin()" class="btn-secondary" style="font-size: 0.9em;">Login as Admin</button>
-                </div>
+                <a href="#" onclick="showStep('admin-login'); return false;" class="admin-link">Admin Login</a>
+            </div>
+        </section>
+
+        <!-- Admin Login Screen -->
+        <section id="step-admin-login" class="step-section">
+            <div class="login-container">
+                <h2>Admin Login</h2>
+                <p>Enter your admin credentials</p>
+
+                <input type="email" id="admin-email" placeholder="Admin email" autocomplete="email">
+                <input type="password" id="admin-password" placeholder="Password" style="margin-top: 10px;">
+                <button onclick="handleAdminLogin()" class="btn-primary" style="margin-top: 15px;">Login</button>
+
+                <a href="#" onclick="showStep('login'); return false;" class="admin-link">Back to regular login</a>
             </div>
         </section>
 
