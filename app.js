@@ -48,7 +48,7 @@ function showStep(stepId) {
 // Authentication Functions
 // ============================================================================
 
-function handleLogin() {
+async function handleLogin() {
     const email = document.getElementById('login-email').value.trim();
 
     if (!email || !email.includes('@')) {
@@ -59,6 +59,18 @@ function handleLogin() {
     // Save email to state and localStorage
     state.userEmail = email;
     localStorage.setItem('userEmail', email);
+
+    // Track login on server (for admin panel visibility)
+    try {
+        await fetch(`${state.apiUrl}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+        });
+    } catch (error) {
+        console.warn('Failed to track login:', error);
+        // Continue anyway - login tracking is not critical
+    }
 
     // Show user bar and header
     document.getElementById('user-bar').style.display = 'flex';
@@ -394,6 +406,10 @@ function displayAdminUsers(users) {
                 <div class="job-stat">
                     <div class="job-stat-value">${user.verified_rois || 0}</div>
                     <div class="job-stat-label">Verified</div>
+                </div>
+                <div class="job-stat">
+                    <div class="job-stat-value">${user.login_count || 0}</div>
+                    <div class="job-stat-label">Logins</div>
                 </div>
             </div>
         </div>
@@ -2827,6 +2843,11 @@ function updateDropboxStatus(message, success) {
     const statusDiv = document.getElementById('dropbox-status');
     const statusText = document.getElementById('dropbox-status-text');
 
+    // Elements may not exist on all screens (e.g., login screen)
+    if (!statusDiv || !statusText) {
+        return;
+    }
+
     statusDiv.style.display = 'block';
     statusText.textContent = message;
     statusDiv.style.background = success ? '#065f46' : '#7f1d1d';
@@ -2920,7 +2941,7 @@ async function generateUniqueFilename(folderPath, filename) {
  * Show duplicate confirmation modal and wait for user response
  * @param {string} filename - The filename that already exists
  * @param {string} folderPath - The folder path
- * @returns {Promise<string>} - 'overwrite', 'rename', or 'cancel'
+ * @returns {Promise<string>} - 'rename' or 'cancel'
  */
 function showDuplicateConfirmModal(filename, folderPath) {
     return new Promise((resolve) => {
@@ -2932,27 +2953,25 @@ function showDuplicateConfirmModal(filename, folderPath) {
                 <h3>File Already Exists</h3>
                 <p>A file named <strong>${filename}</strong> already exists in:</p>
                 <p style="word-break: break-all; color: #666; font-size: 0.9em;">${folderPath}</p>
-                <p>What would you like to do?</p>
+                <p>Would you like to save it as a copy with a different name?</p>
                 <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
-                    <button class="btn btn-primary" id="duplicate-overwrite">Overwrite</button>
-                    <button class="btn btn-secondary" id="duplicate-rename">Save as Copy</button>
-                    <button class="btn" id="duplicate-cancel">Cancel</button>
+                    <button class="btn btn-primary" id="duplicate-rename">Save as Copy</button>
+                    <button class="btn" id="duplicate-cancel">Don't Save</button>
                 </div>
             </div>
         `;
         document.body.appendChild(modal);
 
-        document.getElementById('duplicate-overwrite').onclick = () => {
-            document.body.removeChild(modal);
-            resolve('overwrite');
-        };
         document.getElementById('duplicate-rename').onclick = () => {
             document.body.removeChild(modal);
             resolve('rename');
         };
         document.getElementById('duplicate-cancel').onclick = () => {
-            document.body.removeChild(modal);
-            resolve('cancel');
+            // Ask for confirmation before canceling
+            if (confirm('Are you sure you don\'t want to save this image?')) {
+                document.body.removeChild(modal);
+                resolve('cancel');
+            }
         };
     });
 }
@@ -3065,11 +3084,8 @@ async function regenerateAndSaveToDropbox(imageId) {
             const userChoice = await showDuplicateConfirmModal(gradedFilename, gradedFolderPath);
 
             if (userChoice === 'cancel') {
-                console.log('User cancelled upload');
+                console.log('User chose not to save');
                 return;
-            } else if (userChoice === 'overwrite') {
-                uploadMode = 'overwrite';
-                console.log('User chose to overwrite');
             } else if (userChoice === 'rename') {
                 finalFilename = await generateUniqueFilename(gradedFolderPath, gradedFilename);
                 console.log(`User chose to save as: ${finalFilename}`);
