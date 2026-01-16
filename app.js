@@ -2502,7 +2502,7 @@ async function verifyWrong() {
 async function verifySAMFailure() {
     // Check if we're in job verification mode or regular verification mode
     if (state.currentJob && state.currentROIs) {
-        // Job verification mode - submit to API with SAM failure note
+        // Job verification mode - submit to API with SAM failure flag
         const roi = state.currentROIs[state.currentROIIndex];
 
         try {
@@ -2512,6 +2512,7 @@ async function verifySAMFailure() {
                 body: JSON.stringify({
                     user_email: state.userEmail,
                     is_correct: false,
+                    is_sam_failure: true,  // Flag to exclude from final visualization
                     notes: 'SAM_FAILURE: Detection error (merged/partial diamond)'
                 })
             });
@@ -2519,6 +2520,7 @@ async function verifySAMFailure() {
             state.verificationData.push({
                 roi_id: roi.id,
                 is_correct: false,
+                is_sam_failure: true,
                 notes: 'SAM_FAILURE'
             });
 
