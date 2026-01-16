@@ -400,16 +400,16 @@ function displayAdminUsers(users) {
                     <div class="job-stat-label">Jobs</div>
                 </div>
                 <div class="job-stat">
+                    <div class="job-stat-value">${user.processed_images || 0}</div>
+                    <div class="job-stat-label">Images</div>
+                </div>
+                <div class="job-stat">
                     <div class="job-stat-value">${user.total_rois || 0}</div>
-                    <div class="job-stat-label">Total ROIs</div>
+                    <div class="job-stat-label">ROIs</div>
                 </div>
                 <div class="job-stat">
                     <div class="job-stat-value">${user.verified_rois || 0}</div>
                     <div class="job-stat-label">Verified</div>
-                </div>
-                <div class="job-stat">
-                    <div class="job-stat-value">${user.login_count || 0}</div>
-                    <div class="job-stat-label">Logins</div>
                 </div>
             </div>
         </div>
