@@ -28,9 +28,12 @@ const DROPBOX_CONFIG = {
 
 // Admin Configuration
 const ADMIN_EMAIL = 'sivovolenkodaniil@gmail.com';
+let isAdminAuthenticated = false;  // Track if admin password was verified
 
 function isAdmin() {
-    return state.userEmail && state.userEmail.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+    return state.userEmail &&
+           state.userEmail.toLowerCase() === ADMIN_EMAIL.toLowerCase() &&
+           isAdminAuthenticated;
 }
 
 let dropboxClient = null;
@@ -87,6 +90,70 @@ async function handleLogin() {
     showStep('dashboard');
 }
 
+async function handleAdminLogin() {
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('admin-password').value;
+
+    if (!email || !email.includes('@')) {
+        alert('Please enter your email address first');
+        return;
+    }
+
+    if (!password) {
+        alert('Please enter the admin password');
+        return;
+    }
+
+    // Verify admin password with server
+    try {
+        const response = await fetch(`${state.apiUrl}/auth/admin-login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            alert(data.error || 'Admin login failed');
+            return;
+        }
+
+        if (!data.is_admin) {
+            alert('This email is not authorized for admin access');
+            return;
+        }
+
+        // Mark as admin authenticated
+        isAdminAuthenticated = true;
+
+        // Save email to state and localStorage
+        state.userEmail = email;
+        localStorage.setItem('userEmail', email);
+
+        // Show user bar and header
+        document.getElementById('user-bar').style.display = 'flex';
+        document.getElementById('main-header').style.display = 'block';
+        document.getElementById('current-user-email').textContent = email + ' (Admin)';
+
+        // Show admin panel button
+        const adminBtn = document.getElementById('admin-panel-btn');
+        if (adminBtn) {
+            adminBtn.style.display = 'inline-block';
+        }
+
+        // Clear password field
+        document.getElementById('admin-password').value = '';
+
+        // Go to dashboard
+        showStep('dashboard');
+
+    } catch (error) {
+        console.error('Admin login error:', error);
+        alert('Failed to connect to server. Please try again.');
+    }
+}
+
 function handleLogout() {
     if (!confirm('Are you sure you want to sign out?')) {
         return;
@@ -96,6 +163,7 @@ function handleLogout() {
     state.userEmail = null;
     state.currentJob = null;
     state.currentJobImages = null;
+    isAdminAuthenticated = false;  // Clear admin authentication
     localStorage.removeItem('userEmail');
 
     // Clear Dropbox credentials (so each user can connect their own Dropbox)
