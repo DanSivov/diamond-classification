@@ -2585,7 +2585,12 @@ function closeCorrectionModal() {
 
 function verifySkip() {
     state.currentROIIndex++;
-    updateVerificationDisplay();
+    // Use correct update function based on mode
+    if (state.currentJob && state.currentROIs) {
+        updateROIVerificationDisplay();
+    } else {
+        updateVerificationDisplay();
+    }
 }
 
 function verifyQuit() {
