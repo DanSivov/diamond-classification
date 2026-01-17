@@ -26,14 +26,24 @@ const DROPBOX_CONFIG = {
     folderPath: '/sorting-robot'
 };
 
-// Admin Configuration
-const ADMIN_EMAIL = 'sivovolenkodaniil@gmail.com';
+// Admin Configuration - fetched from server
+let isAdminEmail = false;  // Track if email is an admin email (from server)
 let isAdminAuthenticated = false;  // Track if admin password was verified
 
 function isAdmin() {
-    return state.userEmail &&
-           state.userEmail.toLowerCase() === ADMIN_EMAIL.toLowerCase() &&
-           isAdminAuthenticated;
+    return state.userEmail && isAdminEmail && isAdminAuthenticated;
+}
+
+async function checkAdminStatus(email) {
+    // Check if email is admin by querying the server
+    try {
+        const response = await fetch(`${state.apiUrl}/check-admin?email=${encodeURIComponent(email)}`);
+        const data = await response.json();
+        return data.is_admin === true;
+    } catch (error) {
+        console.warn('Failed to check admin status:', error);
+        return false;
+    }
 }
 
 let dropboxClient = null;
@@ -63,6 +73,9 @@ async function handleLogin() {
     state.userEmail = email;
     localStorage.setItem('userEmail', email);
 
+    // Check if this email is an admin (from server)
+    isAdminEmail = await checkAdminStatus(email);
+
     // Track login on server (for admin panel visibility)
     try {
         await fetch(`${state.apiUrl}/auth/login`, {
@@ -81,6 +94,7 @@ async function handleLogin() {
     document.getElementById('current-user-email').textContent = email;
 
     // Show/hide admin panel button based on admin status
+    // (only shown after admin password is verified via handleAdminLogin)
     const adminBtn = document.getElementById('admin-panel-btn');
     if (adminBtn) {
         adminBtn.style.display = isAdmin() ? 'inline-block' : 'none';
@@ -125,6 +139,7 @@ async function handleAdminLogin() {
         }
 
         // Mark as admin authenticated
+        isAdminEmail = true;
         isAdminAuthenticated = true;
 
         // Save email to state and localStorage
@@ -164,6 +179,7 @@ function handleLogout() {
     state.userEmail = null;
     state.currentJob = null;
     state.currentJobImages = null;
+    isAdminEmail = false;  // Clear admin email status
     isAdminAuthenticated = false;  // Clear admin authentication
     localStorage.removeItem('userEmail');
 
