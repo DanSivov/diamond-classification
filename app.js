@@ -26,9 +26,9 @@ const DROPBOX_CONFIG = {
     folderPath: '/sorting-robot'
 };
 
-// Admin Configuration - fetched from server
+// Admin Configuration - fetched from server, persisted in sessionStorage
 let isAdminEmail = false;  // Track if email is an admin email (from server)
-let isAdminAuthenticated = false;  // Track if admin password was verified
+let isAdminAuthenticated = sessionStorage.getItem('isAdminAuthenticated') === 'true';  // Persists across page reloads
 
 function isAdmin() {
     return state.userEmail && isAdminEmail && isAdminAuthenticated;
@@ -91,7 +91,10 @@ async function handleLogin() {
     // Show user bar and header
     document.getElementById('user-bar').style.display = 'flex';
     document.getElementById('main-header').style.display = 'block';
-    document.getElementById('current-user-email').textContent = email;
+
+    // Show email with (Admin) suffix if authenticated as admin
+    const emailDisplay = isAdmin() ? email + ' (Admin)' : email;
+    document.getElementById('current-user-email').textContent = emailDisplay;
 
     // Show/hide admin panel button based on admin status
     // (only shown after admin password is verified via handleAdminLogin)
@@ -138,9 +141,10 @@ async function handleAdminLogin() {
             return;
         }
 
-        // Mark as admin authenticated
+        // Mark as admin authenticated (persist in sessionStorage for page reloads)
         isAdminEmail = true;
         isAdminAuthenticated = true;
+        sessionStorage.setItem('isAdminAuthenticated', 'true');
 
         // Save email to state and localStorage
         state.userEmail = email;
@@ -181,6 +185,7 @@ function handleLogout() {
     state.currentJobImages = null;
     isAdminEmail = false;  // Clear admin email status
     isAdminAuthenticated = false;  // Clear admin authentication
+    sessionStorage.removeItem('isAdminAuthenticated');  // Clear persisted admin state
     localStorage.removeItem('userEmail');
 
     // Clear Dropbox credentials (so each user can connect their own Dropbox)

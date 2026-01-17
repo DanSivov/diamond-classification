@@ -1,0 +1,26 @@
+{
+  "round_circularity_threshold": 0.85,
+  "sam_accuracy": 0.9471153846153846,
+  "orientation_accuracy": 0.825,
+  "sam_feature_cols": [
+    "circularity",
+    "solidity",
+    "convexity",
+    "aspect_ratio_bbox",
+    "extent",
+    "num_contours",
+    "defect_density"
+  ],
+  "orient_feature_cols": [
+    "outline_sym",
+    "reflection_sym",
+    "aspect_ratio",
+    "spot_sym",
+    "has_spot",
+    "num_reflections",
+    "circularity",
+    "image_is_round",
+    "type_emerald",
+    "type_other"
+  ]
+}
