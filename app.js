@@ -1450,14 +1450,8 @@ async function processSelectedDropboxFiles() {
         // All files processed
         console.log(`Job ${jobId} complete: ${processedCount}/${totalFiles} images, ${totalRois} ROIs`);
 
-        // Show job summary
-        showJobSummary({
-            job_id: jobId,
-            processed_images: processedCount,
-            total_images: totalFiles,
-            total_rois: totalRois,
-            status: 'ready'
-        });
+        // Load job results and show summary
+        await loadJobResults(jobId);
 
     } catch (error) {
         console.error('Dropbox image processing failed:', error);
@@ -1508,8 +1502,8 @@ async function startEarlyVerification() {
 
     console.log('Starting early verification for job:', state.currentJob.job_id);
 
-    // Load the job for verification
-    await loadJobForVerification(state.currentJob.job_id);
+    // Load the job results and start verification
+    await loadJobResults(state.currentJob.job_id);
 }
 
 // Poll job status until complete
