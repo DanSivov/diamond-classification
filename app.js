@@ -1315,56 +1315,16 @@ async function processSelectedDropboxFiles() {
     }
 
     // Save selected files before closing modal (which clears the state)
-    const filesToDownload = [...dropboxBrowserState.selectedFiles];
+    const filesToProcess = [...dropboxBrowserState.selectedFiles];
+    const totalFiles = filesToProcess.length;
 
     closeDropboxBrowser();
 
     try {
-        // Download images from Dropbox
-        console.log('Downloading', filesToDownload.length, 'images from Dropbox...');
         showStep('processing');
-        showProcessingStatus(`Downloading ${filesToDownload.length} images from Dropbox...`, 0);
 
-        const filesData = [];
-        for (let i = 0; i < filesToDownload.length; i++) {
-            const file = filesToDownload[i];
-            const progress = Math.round((i / filesToDownload.length) * 30); // 0-30% for download
-            showProcessingStatus(`Downloading ${file.name}... (${i + 1}/${filesToDownload.length})`, progress);
-
-            // Store source path for this file (used when saving graded image back)
-            // file.path looks like: /sorting-robot/marquise/original/original_image123.png
-            dropboxSourcePaths.set(file.name, file.path);
-            console.log(`Stored source path for ${file.name}: ${file.path}`);
-
-            const downloadResponse = await dropboxClient.filesDownload({
-                path: file.path
-            });
-
-            const blob = downloadResponse.result.fileBlob;
-
-            // Convert to base64 for efficient JSON transfer
-            const arrayBuffer = await blob.arrayBuffer();
-            const uint8Array = new Uint8Array(arrayBuffer);
-
-            // Convert to base64 in chunks to avoid stack overflow on large files
-            let base64 = '';
-            const chunkSize = 32768; // 32KB chunks
-            for (let i = 0; i < uint8Array.length; i += chunkSize) {
-                const chunk = uint8Array.subarray(i, i + chunkSize);
-                base64 += String.fromCharCode.apply(null, chunk);
-            }
-            base64 = btoa(base64);
-
-            filesData.push({
-                filename: file.name,
-                data: base64  // Send as base64 string instead of array
-            });
-        }
-
-        console.log('Downloaded', filesData.length, 'files from Dropbox');
-
-        // Check if API is available
-        showProcessingStatus('Checking API availability...', 35);
+        // Check if API is available first
+        showProcessingStatus('Checking API availability...', 0);
         const apiAvailable = await checkAPIHealth();
 
         if (!apiAvailable) {
@@ -1373,44 +1333,183 @@ async function processSelectedDropboxFiles() {
             return;
         }
 
-        // Create async job
-        showProcessingStatus('Creating job...', 40);
+        // Create chunked job (just the count, no files yet)
+        showProcessingStatus('Creating job...', 5);
 
-        const response = await fetch(`${state.apiUrl}/jobs/create`, {
+        const createResponse = await fetch(`${state.apiUrl}/jobs/create-chunked`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                files: filesData,
-                user_email: state.userEmail  // Include user email for job isolation
+                total_images: totalFiles,
+                user_email: state.userEmail
             })
         });
 
-        if (!response.ok) {
+        if (!createResponse.ok) {
             throw new Error('Failed to create job');
         }
 
-        const jobData = await response.json();
+        const jobData = await createResponse.json();
         state.currentJob = jobData;
+        const jobId = jobData.job_id;
 
-        console.log('Job created:', jobData.job_id);
+        console.log(`Created chunked job ${jobId} for ${totalFiles} images`);
 
-        // Start polling for job status
-        pollJobStatus(jobData.job_id);
+        // Process images one at a time (download from Dropbox + upload to API)
+        let processedCount = 0;
+        let totalRois = 0;
+
+        for (let i = 0; i < filesToProcess.length; i++) {
+            const file = filesToProcess[i];
+            const fileNum = i + 1;
+
+            // Update status with detailed progress
+            const overallProgress = Math.round((i / totalFiles) * 90) + 5; // 5-95%
+            showChunkedProcessingStatus({
+                currentFile: file.name,
+                fileNum: fileNum,
+                totalFiles: totalFiles,
+                processedCount: processedCount,
+                totalRois: totalRois,
+                stage: 'downloading',
+                progress: overallProgress
+            });
+
+            // Store source path for this file (used when saving graded image back)
+            dropboxSourcePaths.set(file.name, file.path);
+            console.log(`Processing ${fileNum}/${totalFiles}: ${file.name}`);
+
+            try {
+                // Download from Dropbox
+                const downloadResponse = await dropboxClient.filesDownload({
+                    path: file.path
+                });
+
+                const blob = downloadResponse.result.fileBlob;
+
+                // Convert to base64
+                const arrayBuffer = await blob.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+
+                let base64 = '';
+                const chunkSize = 32768;
+                for (let j = 0; j < uint8Array.length; j += chunkSize) {
+                    const chunk = uint8Array.subarray(j, j + chunkSize);
+                    base64 += String.fromCharCode.apply(null, chunk);
+                }
+                base64 = btoa(base64);
+
+                // Update status to show we're now uploading/processing
+                showChunkedProcessingStatus({
+                    currentFile: file.name,
+                    fileNum: fileNum,
+                    totalFiles: totalFiles,
+                    processedCount: processedCount,
+                    totalRois: totalRois,
+                    stage: 'processing',
+                    progress: overallProgress
+                });
+
+                // Upload and process single image
+                const uploadResponse = await fetch(`${state.apiUrl}/jobs/${jobId}/add-image`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        filename: file.name,
+                        data: base64,
+                        user_email: state.userEmail
+                    })
+                });
+
+                if (!uploadResponse.ok) {
+                    const errorData = await uploadResponse.json();
+                    console.error(`Failed to process ${file.name}:`, errorData.error);
+                    continue; // Skip this file but continue with others
+                }
+
+                const result = await uploadResponse.json();
+                processedCount = result.processed_images;
+                totalRois = result.total_rois || totalRois;
+
+                console.log(`Processed ${file.name}: ${result.diamonds_found} diamonds found`);
+
+                // Update state with latest job info
+                state.currentJob = {
+                    ...state.currentJob,
+                    processed_images: processedCount,
+                    total_rois: totalRois,
+                    status: result.status
+                };
+
+            } catch (fileError) {
+                console.error(`Error processing ${file.name}:`, fileError);
+                // Continue with next file
+            }
+        }
+
+        // All files processed
+        console.log(`Job ${jobId} complete: ${processedCount}/${totalFiles} images, ${totalRois} ROIs`);
+
+        // Show job summary
+        showJobSummary({
+            job_id: jobId,
+            processed_images: processedCount,
+            total_images: totalFiles,
+            total_rois: totalRois,
+            status: 'ready'
+        });
 
     } catch (error) {
         console.error('Dropbox image processing failed:', error);
 
-        // Handle 401 authentication error
         if (error.status === 401) {
             alert('Session expired. Please reconnect to Dropbox.');
             await reauthenticateDropbox();
         } else {
-            alert('Failed to process images from Dropbox: ' + error.message);
+            alert('Failed to process images: ' + error.message);
         }
         showStep('new-classification-source');
     }
+}
+
+// Show detailed chunked processing status
+function showChunkedProcessingStatus({ currentFile, fileNum, totalFiles, processedCount, totalRois, stage, progress }) {
+    const statusDiv = document.getElementById('processing-status');
+    const stageText = stage === 'downloading' ? 'Downloading' : 'Processing';
+
+    statusDiv.innerHTML = `
+        <div class="progress-container">
+            <div class="progress-bar-outer">
+                <div class="progress-bar-inner" style="width: ${progress}%"></div>
+            </div>
+            <p class="progress-text">${progress}%</p>
+        </div>
+        <div class="processing-details">
+            <p><strong>${stageText}:</strong> ${currentFile}</p>
+            <p>Image ${fileNum} of ${totalFiles}</p>
+            <p>Processed: ${processedCount} images, ${totalRois} diamonds found</p>
+        </div>
+        ${processedCount > 0 ? `
+            <div class="early-verify-option">
+                <button onclick="startEarlyVerification()" class="btn-secondary">
+                    Start Verifying Now (${totalRois} ROIs ready)
+                </button>
+            </div>
+        ` : ''}
+    `;
+}
+
+// Start verification while still processing
+async function startEarlyVerification() {
+    if (!state.currentJob || !state.currentJob.job_id) {
+        alert('No job in progress');
+        return;
+    }
+
+    console.log('Starting early verification for job:', state.currentJob.job_id);
+
+    // Load the job for verification
+    await loadJobForVerification(state.currentJob.job_id);
 }
 
 // Poll job status until complete
